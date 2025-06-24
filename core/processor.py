@@ -994,8 +994,8 @@ def create_pdf_cards(
                     header = headers[i] if i < len(headers) else f"Столбец {i+1}"
                     header = str(header).strip()
                     if header and header.lower() != 'nan':
-                        # Добавляем форматированную строку с заголовком и значением
-                        text_lines.append(f"**{header}:** {cell_value}")
+                        # Добавляем заголовок и значение как отдельные элементы для таблицы
+                        text_lines.append({"header": header, "value": cell_value})
 
         # --- Dynamically adjust font size ---
         available_width = pdf.w - pdf.l_margin - pdf.r_margin
@@ -1011,57 +1011,29 @@ def create_pdf_cards(
             all_processed_lines = []
             total_height = 0
             
-            for line in text_lines:
-                # Проверяем, содержит ли строка маркеры жирного текста
-                if '**' in line:
-                    # Разделяем строку на части (заголовок и значение)
-                    parts = line.split(':', 1)
-                    if len(parts) == 2:
-                        header = parts[0].replace('**', '')
-                        value = parts[1].strip()
-                        
-                        # Обрабатываем заголовок и значение отдельно
-                        safe_header = _force_wrap_text(pdf, header, available_width)
-                        safe_value = _force_wrap_text(pdf, value, available_width)
-                        
-                        # Добавляем обработанные строки
-                        all_processed_lines.append(f"**{safe_header}**\n{safe_value}")
-                    else:
-                        # Если разделение не удалось, обрабатываем строку как обычно
-                        safe_line = _force_wrap_text(pdf, line.replace('**', ''), available_width)
-                        all_processed_lines.append(safe_line)
-                else:
-                    # Обычная обработка для строк без маркеров
-                    safe_line = _force_wrap_text(pdf, line, available_width)
-                    all_processed_lines.append(safe_line)
+            for item in text_lines:
+                # Обрабатываем заголовок и значение отдельно
+                safe_header = _force_wrap_text(pdf, item['header'], available_width/2 - 5)  # Половина ширины минус отступ
+                safe_value = _force_wrap_text(pdf, item['value'], available_width/2 - 5)
+                
+                # Добавляем обработанные строки как словарь
+                all_processed_lines.append({"header": safe_header, "value": safe_value})
 
             # Calculate height based on the safe, wrapped lines
-            for safe_line in all_processed_lines:
-                if '**' in safe_line:
-                    # Разделяем строку на части (заголовок и значение)
-                    parts = safe_line.split(':', 1)
-                    if len(parts) == 2:
-                        header = parts[0].replace('**', '')
-                        value = parts[1].strip()
-                        
-                        # Считаем высоту для заголовка
-                        pdf.set_font(font_family, 'B')
-                        header_lines = len(pdf.multi_cell(w=available_width, txt=header, split_only=True))
-                        
-                        # Считаем высоту для значения
-                        pdf.set_font(font_family, '')
-                        value_lines = len(pdf.multi_cell(w=available_width, txt=value, split_only=True))
-                        
-                        # Суммируем высоту
-                        total_height += (header_lines + value_lines) * pdf.font_size + 2  # +2 для отступа между блоками
-                    else:
-                        # Если разделение не удалось, считаем высоту как обычно
-                        num_lines = len(pdf.multi_cell(w=available_width, txt=safe_line.replace('**', ''), split_only=True))
-                        total_height += num_lines * pdf.font_size
-                else:
-                    # Обычный подсчет для строк без маркеров
-                    num_lines = len(pdf.multi_cell(w=available_width, txt=safe_line, split_only=True))
-                    total_height += num_lines * pdf.font_size
+            for item in all_processed_lines:
+                # Считаем высоту для заголовка
+                pdf.set_font(font_family, 'B')
+                header_lines = len(pdf.multi_cell(w=available_width/2 - 5, txt=item['header'], split_only=True))
+                
+                # Считаем высоту для значения
+                pdf.set_font(font_family, '')
+                value_lines = len(pdf.multi_cell(w=available_width/2 - 5, txt=item['value'], split_only=True))
+                
+                # Берем максимальное количество строк (заголовок или значение)
+                max_lines = max(header_lines, value_lines)
+                
+                # Суммируем высоту (используем максимальное количество строк, так как они будут отображаться рядом)
+                total_height += max_lines * pdf.font_size + 2  # +2 для отступа между строками таблицы
             
             if total_height < available_height:
                 best_font_size = test_font_size
@@ -1074,93 +1046,72 @@ def create_pdf_cards(
             # Process with the smallest font size
             all_processed_lines_fallback = []
             for line in text_lines:
-                # Проверяем, содержит ли строка маркеры жирного текста
-                if '**' in line:
-                    # Разделяем строку на части (заголовок и значение)
-                    parts = line.split('\n', 1)
-                    if len(parts) == 2:
-                        header = parts[0].replace('**', '')
-                        value = parts[1]
-                        
-                        # Обрабатываем заголовок и значение отдельно
-                        safe_header = _force_wrap_text(pdf, header, available_width)
-                        safe_value = _force_wrap_text(pdf, value, available_width)
-                        
-                        # Добавляем обработанные строки
-                        all_processed_lines_fallback.append(f"**{safe_header}:** {safe_value}")
-                    else:
-                        # Если разделение не удалось, обрабатываем строку как обычно
-                        safe_line = _force_wrap_text(pdf, line.replace('**', ''), available_width)
-                        all_processed_lines_fallback.append(safe_line)
-                else:
-                    # Обычная обработка для строк без маркеров
-                    safe_line = _force_wrap_text(pdf, line, available_width)
-                    all_processed_lines_fallback.append(safe_line)
+                # Обрабатываем заголовок и значение отдельно
+                safe_header = _force_wrap_text(pdf, line['header'], available_width/2 - 5)
+                safe_value = _force_wrap_text(pdf, line['value'], available_width/2 - 5)
+                
+                # Добавляем обработанные строки как словарь
+                all_processed_lines_fallback.append({'header': safe_header, 'value': safe_value})
             final_lines_to_render = all_processed_lines_fallback
             
             # Optional: check height again for warning
             total_height_fallback = 0
-            for safe_line in final_lines_to_render:
-                if '**' in safe_line:
-                    # Разделяем строку на части (заголовок и значение)
-                    parts = safe_line.split('\n', 1)
-                    if len(parts) == 2:
-                        header = parts[0].replace('**', '')
-                        value = parts[1]
-                        
-                        # Считаем высоту для заголовка
-                        pdf.set_font(font_family, 'B')
-                        header_lines = len(pdf.multi_cell(w=available_width, txt=header, split_only=True))
-                        
-                        # Считаем высоту для значения
-                        pdf.set_font(font_family, '')
-                        value_lines = len(pdf.multi_cell(w=available_width, txt=value, split_only=True))
-                        
-                        # Суммируем высоту
-                        total_height_fallback += (header_lines + value_lines) * pdf.font_size + 1  # +1 для отступа между блоками
-                    else:
-                        # Если разделение не удалось, считаем высоту как обычно
-                        num_lines = len(pdf.multi_cell(w=available_width, txt=safe_line.replace('**', ''), split_only=True))
-                        total_height_fallback += num_lines * pdf.font_size
-                else:
-                    # Обычный подсчет для строк без маркеров
-                    num_lines = len(pdf.multi_cell(w=available_width, txt=safe_line, split_only=True))
-                    total_height_fallback += num_lines * pdf.font_size
+            for item in final_lines_to_render:
+                # Считаем высоту для заголовка
+                pdf.set_font(font_family, 'B')
+                header_lines = len(pdf.multi_cell(w=available_width/2 - 5, txt=item['header'], split_only=True))
+                
+                # Считаем высоту для значения
+                pdf.set_font(font_family, '')
+                value_lines = len(pdf.multi_cell(w=available_width/2 - 5, txt=item['value'], split_only=True))
+                
+                # Берем максимальное количество строк (заголовок или значение)
+                max_lines = max(header_lines, value_lines)
+                
+                # Суммируем высоту (используем максимальное количество строк, так как они будут отображаться рядом)
+                total_height_fallback += max_lines * pdf.font_size + 1  # +1 для отступа между строками таблицы
             if total_height_fallback > available_height:
                  logger.warning(f"Текст для артикула {article} не помещается по высоте даже с минимальным шрифтом. Возможны искажения.")
 
         pdf.set_font_size(best_font_size)
 
-        # Добавляем каждую строку текста в PDF с форматированием
-        for line in final_lines_to_render:
-            # Проверяем, содержит ли строка маркеры жирного текста
-            if '**' in line:
-                # Разделяем строку на части (заголовок и значение)
-                parts = line.split(':', 1)
-                if len(parts) == 2:
-                    header = parts[0].replace('**', '')
-                    value = parts[1].strip()
-                    
-                    # Устанавливаем жирный шрифт для заголовка
-                    pdf.set_font_size(best_font_size)
-                    pdf.set_font(font_family, 'B')  # B - жирный шрифт
-                    pdf.multi_cell(w=available_width, txt=header, align='L')  # L - выравнивание по левому краю
-                    
-                    # Добавляем небольшой отступ между заголовком и значением
-                    pdf.ln(1)
-                    
-                    # Возвращаемся к обычному шрифту для значения
-                    pdf.set_font(font_family, '')
-                    pdf.multi_cell(w=available_width, txt=value, align='L')  # L - выравнивание по левому краю
-                else:
-                    # Если разделение не удалось, выводим строку как есть
-                    pdf.multi_cell(w=available_width, txt=line.replace('**', ''), align='L')
-            else:
-                # Если нет маркеров жирного текста, выводим строку как есть
-                pdf.multi_cell(w=available_width, txt=line, align='L')
+        # Добавляем каждую строку текста в PDF в формате двухколоночной таблицы
+        for item in final_lines_to_render:
+            # Сохраняем текущую позицию X и Y
+            x_pos = pdf.get_x()
+            y_pos = pdf.get_y()
             
-            # Добавляем небольшой отступ между блоками текста
-            pdf.ln(1)
+            # Ширина каждой колонки (половина доступной ширины минус небольшой отступ)
+            col_width = available_width / 2 - 5
+            
+            # Устанавливаем жирный шрифт для заголовка (левая колонка)
+            pdf.set_font_size(best_font_size)
+            pdf.set_font(font_family, 'B')  # B - жирный шрифт
+            
+            # Получаем высоту заголовка
+            header_lines = pdf.multi_cell(w=col_width, txt=item['header'], split_only=True)
+            header_height = len(header_lines) * pdf.font_size
+            
+            # Получаем высоту значения
+            pdf.set_font(font_family, '')
+            value_lines = pdf.multi_cell(w=col_width, txt=item['value'], split_only=True)
+            value_height = len(value_lines) * pdf.font_size
+            
+            # Определяем максимальную высоту строки
+            max_height = max(header_height, value_height)
+            
+            # Отрисовываем заголовок (левая колонка)
+            pdf.set_xy(x_pos, y_pos)
+            pdf.set_font(font_family, 'B')
+            pdf.multi_cell(w=col_width, txt=item['header'], align='L')
+            
+            # Отрисовываем значение (правая колонка)
+            pdf.set_xy(x_pos + col_width + 10, y_pos)  # +10 для отступа между колонками
+            pdf.set_font(font_family, '')
+            pdf.multi_cell(w=col_width, txt=item['value'], align='L')
+            
+            # Перемещаемся на следующую строку с учетом максимальной высоты
+            pdf.set_y(y_pos + max_height + 2)  # +2 для отступа между строками
             
         inserted_cards += 1
 
