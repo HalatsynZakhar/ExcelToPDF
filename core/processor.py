@@ -9,7 +9,7 @@ import json
 import time
 from typing import Dict, List, Any, Optional, Tuple
 import openpyxl
-from openpyxl.utils import get_column_letter
+from openpyxl.utils import get_column_letter, column_index_from_string
 import shutil
 from PIL import Image as PILImage
 import re
@@ -833,15 +833,69 @@ def _get_col_index(col_identifier: str, df_columns: pd.Index) -> int:
             raise ValueError(f"Столбец '{col_identifier}' не найден.")
 
 def find_image_path(article: str, folders: List[str]) -> Optional[str]:
-    """Ищет изображение по артикулу в списке папок."""
+    """
+    Ищет изображение по артикулу в списке папок, включая подпапки (рекурсивно).
+    """
+    logger.debug(f"Рекурсивный поиск для артикула '{article}' в папках: {folders}")
     for folder in folders:
         if not folder or not os.path.exists(folder):
+            if folder:
+                logger.warning(f"Папка с изображениями не существует или недоступна: {folder}")
             continue
-        for ext in ['.jpg', '.jpeg', '.png']:
-            img_path = os.path.join(folder, f"{article}{ext}")
-            if os.path.exists(img_path):
-                return img_path
+        
+        # Рекурсивный обход папок с помощью os.walk
+        for root, _, files in os.walk(folder):
+            for file in files:
+                # Проверяем, совпадает ли имя файла (без расширения) с артикулом
+                file_name_without_ext, _ = os.path.splitext(file)
+                if file_name_without_ext == article:
+                    img_path = os.path.join(root, file)
+                    logger.info(f"Найдено изображение для артикула '{article}' в подпапке: {img_path}")
+                    return img_path
+
+    logger.warning(f"Изображение для артикула '{article}' не найдено ни в одной из папок (включая подпапки).")
     return None
+
+def _force_wrap_text(pdf: FPDF, text: str, max_width: float) -> str:
+    """
+    A robust text processing function that prepares text for FPDF's multi_cell.
+    It ensures no single token (word) is wider than max_width.
+    1. Replaces any single character that is too wide with '?'.
+    2. Breaks any remaining words that are too wide by inserting spaces.
+    """
+    safe_words = []
+    # Replace non-breaking spaces and strip text as a precaution
+    text = text.replace('\u00A0', ' ').strip()
+
+    for word in text.split(' '):
+        if not word:
+            continue
+        
+        # 1. Sanitize the word of any single character that is too wide
+        sanitized_word = ""
+        for char in word:
+            if pdf.get_string_width(char) > max_width:
+                logger.warning(f"A single character ('{char}') was wider than the cell and has been replaced by '?'.")
+                sanitized_word += "?"
+            else:
+                sanitized_word += char
+        
+        # 2. Break the sanitized word if it's still too long
+        if pdf.get_string_width(sanitized_word) > max_width:
+            processed_word = ""
+            current_chunk = ""
+            for char in sanitized_word:
+                if pdf.get_string_width(current_chunk + char) <= max_width:
+                    current_chunk += char
+                else:
+                    processed_word += current_chunk + " "
+                    current_chunk = char
+            processed_word += current_chunk
+            safe_words.append(processed_word)
+        else:
+            safe_words.append(sanitized_word)
+            
+    return " ".join(safe_words)
 
 def create_pdf_cards(
     df: pd.DataFrame,
@@ -880,7 +934,7 @@ def create_pdf_cards(
             progress_callback(index + 1, total_rows)
 
         try:
-            article = str(row.iloc[article_col_idx])
+            article = str(row.iloc[article_col_idx]).strip()
         except IndexError:
             # This case should be caught by _get_col_index, but as a safeguard:
             raise IndexError(f"Столбец с артикулами ({article_col_name}) не существует в файле.")
@@ -888,44 +942,87 @@ def create_pdf_cards(
         product_img_path = find_image_path(article, product_image_folders)
         package_img_path = find_image_path(article, package_image_folders)
 
-        if not product_img_path and not package_img_path:
-            not_found_articles.append(article)
-            continue
-
+        # Создаем страницу для каждого артикула, даже если изображения отсутствуют
         pdf.add_page()
         
-        # Add images
+        # Если хотя бы одно изображение отсутствует, добавляем артикул в список "ненайденных"
+        if not product_img_path or not package_img_path:
+            not_found_articles.append(article)
+
+        # Добавляем изображения, только если они были найдены
         if product_img_path:
-            pdf.image(product_img_path, x=5, y=5, w=40)
+            try:
+                pdf.image(product_img_path, x=5, y=5, w=40)
+            except Exception as e:
+                logger.error(f"Ошибка при вставке изображения товара '{product_img_path}' для артикула '{article}': {e}")
         if package_img_path:
-            pdf.image(package_img_path, x=45, y=5, w=40)
+            try:
+                pdf.image(package_img_path, x=45, y=5, w=40)
+            except Exception as e:
+                logger.error(f"Ошибка при вставке изображения упаковки '{package_img_path}' для артикула '{article}': {e}")
+
 
         # Add text
         pdf.set_y(50)
         
         text_lines = [str(cell) for i, cell in row.items() if i != article_col_idx]
 
-        # Dynamically adjust font size
-        max_font_size = 20
-        min_font_size = 6
-        font_size = max_font_size
-        
-        while font_size >= min_font_size:
-            pdf.set_font_size(font_size)
-            total_height = 0
-            for line in text_lines:
-                total_height += pdf.font_size * 1.2 # Approximate line height
-            
-            if total_height <= 100: # Available text height
-                break
-            font_size -= 1
-        
-        pdf.set_font_size(font_size)
+        # --- Dynamically adjust font size ---
+        available_width = pdf.w - pdf.l_margin - pdf.r_margin
+        available_height = 155 - pdf.y 
 
-        for line in text_lines:
-            pdf.multi_cell(0, pdf.font_size * 1.2, txt=line, align='C')
+        best_font_size = 0
+        final_lines_to_render = []
+
+        # Iterate from a reasonable max down to a min font size to find the best fit
+        for test_font_size in range(14, 5, -1):
+            pdf.set_font_size(test_font_size)
+            
+            all_processed_lines = []
+            total_height = 0
+            
+            for line in text_lines:
+                # Force wrap text to prevent errors before calculating height
+                safe_line = _force_wrap_text(pdf, line, available_width)
+                all_processed_lines.append(safe_line)
+
+            # Calculate height based on the safe, wrapped lines
+            for safe_line in all_processed_lines:
+                num_lines = len(pdf.multi_cell(w=available_width, txt=safe_line, split_only=True))
+                total_height += num_lines * pdf.font_size
+            
+            if total_height < available_height:
+                best_font_size = test_font_size
+                final_lines_to_render = all_processed_lines
+                break 
+
+        if best_font_size == 0:
+            best_font_size = 6
+            pdf.set_font_size(best_font_size)
+            # Process with the smallest font size
+            all_processed_lines_fallback = []
+            for line in text_lines:
+                safe_line = _force_wrap_text(pdf, line, available_width)
+                all_processed_lines_fallback.append(safe_line)
+            final_lines_to_render = all_processed_lines_fallback
+            
+            # Optional: check height again for warning
+            total_height_fallback = 0
+            for safe_line in final_lines_to_render:
+                 num_lines = len(pdf.multi_cell(w=available_width, txt=safe_line, split_only=True))
+                 total_height_fallback += num_lines * pdf.font_size
+            if total_height_fallback > available_height:
+                 logger.warning(f"Текст для артикула {article} не помещается по высоте даже с минимальным шрифтом. Возможны искажения.")
+
+        pdf.set_font_size(best_font_size)
+
+        for line in final_lines_to_render:
+            pdf.multi_cell(w=available_width, txt=line, align='C')
             
         inserted_cards += 1
+
+    if inserted_cards == 0:
+        return "", 0, not_found_articles
 
     output_filename = f"product_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     output_path = os.path.join(output_folder, output_filename)

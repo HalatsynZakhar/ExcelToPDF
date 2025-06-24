@@ -977,18 +977,28 @@ def process_files():
 
             st.session_state.output_file_path = output_path
             
-            success_msg = f"Обработка завершена. Создано карточек: {inserted_cards}."
-            st.session_state.processing_result = success_msg
-            log.info(success_msg)
-            add_log_message(success_msg, "SUCCESS")
+            if inserted_cards > 0:
+                success_msg = f"Обработка завершена. Создано карточек: {inserted_cards}."
+                st.session_state.processing_result = success_msg
+                log.info(success_msg)
+                add_log_message(success_msg, "SUCCESS")
                 
-            if not_found_articles:
-                st.session_state.not_found_articles = not_found_articles
-                warning_msg = f"Не найдены изображения для {len(not_found_articles)} артикулов."
-                add_log_message(warning_msg, "WARNING")
+                if not_found_articles:
+                    st.session_state.not_found_articles = not_found_articles
+                    warning_msg = f"Не найдены изображения для {len(not_found_articles)} артикулов."
+                    add_log_message(warning_msg, "WARNING")
                 
-            log.info("===================== ОБРАБОТКА ЗАВЕРШЕНА УСПЕШНО =====================")
-            return True
+                log.info("===================== ОБРАБОТКА ЗАВЕРШЕНА УСПЕШНО =====================")
+                return True
+            else:
+                error_msg = f"Не удалось создать PDF. Не найдено ни одного изображения для артикулов в указанном столбце."
+                if not_found_articles:
+                    error_msg += f" (проверено {len(not_found_articles)} артикулов)."
+                st.session_state.processing_error = error_msg
+                log.warning(error_msg)
+                add_log_message(error_msg, "WARNING")
+                log.info("===================== ОБРАБОТКА ЗАВЕРШЕНА (КАРТОЧКИ НЕ СОЗДАНЫ) =====================")
+                return False
 
     except Exception as e:
         error_msg = f"Ошибка при создании PDF: {e}"
