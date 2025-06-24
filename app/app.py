@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import os
 import sys
 import logging
@@ -77,12 +77,22 @@ sys.stderr.reconfigure(encoding='utf-8')
 log = logging.getLogger(__name__)
 
 # Определяем настройки по умолчанию
+def get_downloads_folder():
+    """Получить путь к папке с изображениями товаров по умолчанию"""
+    # Возвращаем сетевой путь к папке с изображениями товаров
+    return r"\\10.10.100.2\Foto"
+
+def get_package_folder():
+    """Получить путь к папке с изображениями упаковок по умолчанию"""
+    # Возвращаем сетевой путь к папке с изображениями упаковок
+    return r"\\10.10.100.2\FotoPack"
+
 default_settings = {
     "paths": {
-        "product_images_folder_path_1": get_downloads_folder(),
+        "product_images_folder_path_1": get_downloads_folder(),  # Путь к папке с изображениями товаров (Foto)
         "product_images_folder_path_2": "",
         "product_images_folder_path_3": "",
-        "package_images_folder_path_1": "",
+        "package_images_folder_path_1": get_package_folder(),    # Путь к папке с изображениями упаковок (FotoPack)
         "package_images_folder_path_2": "",
         "package_images_folder_path_3": ""
     },
@@ -124,9 +134,14 @@ def init_config_manager():
     return st.session_state.config_manager
 
 def get_downloads_folder():
-    """Получить путь к папке с изображениями по умолчанию"""
-    # Возвращаем сетевой путь вместо папки загрузок
+    """Получить путь к папке с изображениями товаров по умолчанию"""
+    # Возвращаем сетевой путь к папке с изображениями товаров
     return r"\\10.10.100.2\Foto"
+
+def get_package_folder():
+    """Получить путь к папке с изображениями упаковок по умолчанию"""
+    # Возвращаем сетевой путь к папке с изображениями упаковок
+    return r"\\10.10.100.2\FotoPack"
     
     # Закомментированный код ниже - оригинальная функция для получения папки загрузок
     # if platform.system() == "Windows":
@@ -299,6 +314,13 @@ def show_settings():
                     cm.set_setting(key, new_path)
                     cm.save_settings("Default")
                     st.rerun()
+                    
+                # Проверка доступности пути
+                if new_path:
+                    if not os.path.exists(new_path):
+                        st.warning(f"⚠️ Папка товаров {i} недоступна. Проверьте путь: {new_path}")
+                    elif new_path.startswith(r"\\"):
+                        st.warning(f"⚠️ Папка товаров {i} указывает на сетевой диск. Убедитесь в доступности.")
 
         with st.expander("Папки с изображениями упаковок", expanded=True):
             st.markdown("Укажите до 3-х папок с изображениями упаковок.")
@@ -310,6 +332,33 @@ def show_settings():
                     cm.set_setting(key, new_path)
                     cm.save_settings("Default")
                     st.rerun()
+                    
+                # Проверка доступности пути
+                if new_path:
+                    if not os.path.exists(new_path):
+                        st.warning(f"⚠️ Папка упаковок {i} недоступна. Проверьте путь: {new_path}")
+                    elif new_path.startswith(r"\\"):
+                        st.warning(f"⚠️ Папка упаковок {i} указывает на сетевой диск. Убедитесь в доступности.")
+        
+        # Кнопка сброса путей
+        if st.button("Сбросить пути к папкам", key="reset_paths_button"):
+            # Устанавливаем пути по умолчанию
+            product_folder = get_downloads_folder()  # Путь к папке с изображениями товаров
+            package_folder = get_package_folder()    # Путь к папке с изображениями упаковок
+            
+            # Сбрасываем пути для изображений товаров
+            cm.set_setting('paths.product_images_folder_path_1', product_folder)
+            cm.set_setting('paths.product_images_folder_path_2', "")
+            cm.set_setting('paths.product_images_folder_path_3', "")
+            
+            # Сбрасываем пути для изображений упаковок
+            cm.set_setting('paths.package_images_folder_path_1', package_folder)
+            cm.set_setting('paths.package_images_folder_path_2', "")
+            cm.set_setting('paths.package_images_folder_path_3', "")
+            
+            cm.save_settings("Default")
+            st.success("Пути к папкам сброшены до значений по умолчанию")
+            st.rerun()
 
 # Функция для загрузки Excel файла
 def load_excel_file(uploaded_file_arg=None):
@@ -939,6 +988,26 @@ def process_files():
         st.session_state.is_processing = True
         st.session_state.processing_result = None
         st.session_state.processing_error = None
+        
+        # Проверяем доступность путей к папкам с изображениями
+        cm = st.session_state.config_manager
+        missing_folders = []
+        
+        for i in range(1, 4):
+            product_path = cm.get_setting(f'paths.product_images_folder_path_{i}', "")
+            package_path = cm.get_setting(f'paths.package_images_folder_path_{i}', "")
+            
+            if product_path and not os.path.exists(product_path):
+                missing_folders.append(f"Папка товаров {i}: {product_path}")
+            if package_path and not os.path.exists(package_path):
+                missing_folders.append(f"Папка упаковок {i}: {package_path}")
+        
+        if missing_folders:
+            error_msg = "Следующие папки с изображениями недоступны:\n" + "\n".join(missing_folders)
+            log.error(error_msg)
+            add_log_message(error_msg, "ERROR")
+            st.session_state.processing_error = error_msg
+            return False
         
         with st.spinner("Идет обработка файла. Пожалуйста, подождите..."):
             cm = st.session_state.config_manager
