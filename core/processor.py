@@ -968,7 +968,20 @@ def create_pdf_cards(
         pdf.set_y(50)
         
         # A more robust way to collect text lines, ignoring the article column
-        text_lines = [str(row.iloc[i]) for i in range(len(row)) if i != article_col_idx]
+        # Собираем текст из всех ячеек строки, кроме столбца с артикулом
+        text_lines = []
+        
+        # Получаем названия столбцов для добавления их к значениям
+        column_names = df.columns.tolist()
+        
+        for i in range(len(row)):
+            if i != article_col_idx:
+                cell_value = str(row.iloc[i]).strip()
+                if cell_value and cell_value.lower() != 'nan':
+                    # Добавляем название столбца к значению для лучшей читаемости
+                    column_name = column_names[i] if i < len(column_names) else f"Столбец {i+1}"
+                    formatted_value = f"{column_name}: {cell_value}"
+                    text_lines.append(formatted_value)
 
         # --- Dynamically adjust font size ---
         available_width = pdf.w - pdf.l_margin - pdf.r_margin
@@ -1019,8 +1032,11 @@ def create_pdf_cards(
 
         pdf.set_font_size(best_font_size)
 
+        # Добавляем каждую строку текста в PDF
         for line in final_lines_to_render:
             pdf.multi_cell(w=available_width, txt=line, align='C')
+            # Добавляем небольшой отступ между строками текста
+            pdf.ln(1)
             
         inserted_cards += 1
 
