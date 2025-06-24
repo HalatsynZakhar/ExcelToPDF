@@ -835,25 +835,27 @@ def _get_col_index(col_identifier: str, df_columns: pd.Index) -> int:
 def find_image_path(article: str, folders: List[str]) -> Optional[str]:
     """
     Ищет изображение по артикулу в списке папок, включая подпапки (рекурсивно).
+    Логика поиска соответствует оригинальной программе.
     """
-    logger.debug(f"Рекурсивный поиск для артикула '{article}' в папках: {folders}")
+    logger.debug(f"Поиск для артикула '{article}' в папках: {folders}")
+    supported_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
+
     for folder in folders:
         if not folder or not os.path.exists(folder):
             if folder:
                 logger.warning(f"Папка с изображениями не существует или недоступна: {folder}")
             continue
         
-        # Рекурсивный обход папок с помощью os.walk
         for root, _, files in os.walk(folder):
             for file in files:
-                # Проверяем, совпадает ли имя файла (без расширения) с артикулом
-                file_name_without_ext, _ = os.path.splitext(file)
-                if file_name_without_ext == article:
-                    img_path = os.path.join(root, file)
-                    logger.info(f"Найдено изображение для артикула '{article}' в подпапке: {img_path}")
-                    return img_path
+                file_name_without_ext, extension = os.path.splitext(file)
+                if extension.lower() in supported_extensions:
+                    if file_name_without_ext == article:
+                        img_path = os.path.join(root, file)
+                        logger.info(f"Найдено изображение для артикула '{article}': {img_path}")
+                        return img_path
 
-    logger.warning(f"Изображение для артикула '{article}' не найдено ни в одной из папок (включая подпапки).")
+    logger.warning(f"Изображение для артикула '{article}' не найдено ни в одной из папок.")
     return None
 
 def _force_wrap_text(pdf: FPDF, text: str, max_width: float) -> str:
@@ -965,7 +967,8 @@ def create_pdf_cards(
         # Add text
         pdf.set_y(50)
         
-        text_lines = [str(cell) for i, cell in row.items() if i != article_col_idx]
+        # A more robust way to collect text lines, ignoring the article column
+        text_lines = [str(row.iloc[i]) for i in range(len(row)) if i != article_col_idx]
 
         # --- Dynamically adjust font size ---
         available_width = pdf.w - pdf.l_margin - pdf.r_margin
