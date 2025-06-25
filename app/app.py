@@ -111,25 +111,31 @@ def init_config_manager():
         # Инициализируем config manager с указанием папки пресетов
         config_manager_instance = config_manager.ConfigManager(presets_folder)
         
-        # Устанавливаем значения по умолчанию, если они отсутствуют
+        # Сначала загружаем существующие настройки
+        config_manager_instance.load_settings()
+        
+        # Устанавливаем значения по умолчанию ТОЛЬКО для отсутствующих настроек
         for i in range(1, 4):
             prod_key = f'paths.product_images_folder_path_{i}'
             pack_key = f'paths.package_images_folder_path_{i}'
-            if config_manager_instance.get_setting(prod_key) is None or config_manager_instance.get_setting(prod_key) == "":
+            current_prod = config_manager_instance.get_setting(prod_key)
+            current_pack = config_manager_instance.get_setting(pack_key)
+            
+            if not current_prod:  # Only set default if empty or None
                 config_manager_instance.set_setting(prod_key, default_settings['paths'][f'product_images_folder_path_{i}'])
-            if config_manager_instance.get_setting(pack_key) is None or config_manager_instance.get_setting(pack_key) == "":
+            if not current_pack:  # Only set default if empty or None
                 config_manager_instance.set_setting(pack_key, default_settings['paths'][f'package_images_folder_path_{i}'])
         
         if not config_manager_instance.get_setting('excel_settings.article_column'):
             config_manager_instance.set_setting('excel_settings.article_column', default_settings['excel_settings']['article_column'])
         
-        # Сохраняем конфигурацию
-        config_manager_instance.save_settings("Default")
+        # Сохраняем конфигурацию только если были добавлены новые настройки
+        config_manager_instance.save_settings()
         
         # Сохраняем менеджер в session_state
         st.session_state.config_manager = config_manager_instance
         
-        log.info("Менеджер конфигурации инициализирован с настройками по умолчанию")
+        log.info("Менеджер конфигурации инициализирован. Загружены существующие настройки с добавлением отсутствующих значений по умолчанию")
     
     return st.session_state.config_manager
 
@@ -1050,6 +1056,14 @@ def process_files():
                 
             temp_dir = ensure_temp_dir()
             
+            # Сохраняем настройки перед обработкой на случай ошибок
+            cm = st.session_state.config_manager
+            if not cm.save_settings():
+                error_msg = "Не удалось сохранить настройки перед обработкой"
+                st.session_state.processing_error = error_msg
+                log.error(error_msg)
+                return False
+
             output_path, inserted_cards, not_found_articles = create_pdf_cards(
                 df=df,
                 article_col_name=article_col,
@@ -1060,9 +1074,9 @@ def process_files():
                 max_total_file_size_mb=st.session_state.get('max_file_size_mb', 100)
             )
 
-            # Сохраняем настройки после обработки файла
-            cm = st.session_state.config_manager
-            cm.save_settings()
+            # Сохраняем настройки после успешной обработки
+            if not cm.save_settings():
+                log.warning("Не удалось сохранить настройки после обработки, но файл был создан")
 
             st.session_state.output_file_path = output_path
             
