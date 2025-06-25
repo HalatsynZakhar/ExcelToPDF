@@ -343,7 +343,7 @@ def show_settings():
         # Добавляем настройку максимального размера файла
         max_size_mb = st.number_input(
             "Максимальный размер файла (МБ)",
-            min_value=10,
+            min_value=1,
             max_value=1000,
             value=100,
             step=10,
