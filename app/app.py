@@ -98,6 +98,9 @@ default_settings = {
     },
     "excel_settings": {
         "article_column": "A"
+    },
+    "file_settings": {
+        "max_size_mb": 100
     }
 }
 
@@ -351,14 +354,18 @@ def show_settings():
                         st.warning(f"⚠️ Папка упаковок {i} указывает на сетевой диск. Убедитесь в доступности.")
 
         # Добавляем настройку максимального размера файла
+        current_max_size = cm.get_setting('file_settings.max_size_mb', 100)
         max_size_mb = st.number_input(
             "Максимальный размер файла (МБ)",
             min_value=1,
             max_value=1000,
-            value=100,
+            value=current_max_size,
             step=10,
             help="Ограничение общего размера файла PDF в мегабайтах"
         )
+        if max_size_mb != current_max_size:
+            cm.set_setting('file_settings.max_size_mb', max_size_mb)
+            cm.save_settings()
         st.session_state.max_file_size_mb = max_size_mb
         
         # Кнопка сброса путей
