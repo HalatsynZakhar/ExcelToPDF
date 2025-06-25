@@ -90,7 +90,7 @@ def get_package_folder():
 default_settings = {
     "paths": {
         "product_images_folder_path_1": get_downloads_folder(),  # Путь к папке с изображениями товаров (Foto)
-        "product_images_folder_path_2": "",
+        "product_images_folder_path_2": r"\\10.10.100.2\pictures",
         "product_images_folder_path_3": "",
         "package_images_folder_path_1": get_package_folder(),    # Путь к папке с изображениями упаковок (FotoPack)
         "package_images_folder_path_2": "",
@@ -115,9 +115,9 @@ def init_config_manager():
         for i in range(1, 4):
             prod_key = f'paths.product_images_folder_path_{i}'
             pack_key = f'paths.package_images_folder_path_{i}'
-            if not config_manager_instance.get_setting(prod_key):
+            if config_manager_instance.get_setting(prod_key) is None or config_manager_instance.get_setting(prod_key) == "":
                 config_manager_instance.set_setting(prod_key, default_settings['paths'][f'product_images_folder_path_{i}'])
-            if not config_manager_instance.get_setting(pack_key):
+            if config_manager_instance.get_setting(pack_key) is None or config_manager_instance.get_setting(pack_key) == "":
                 config_manager_instance.set_setting(pack_key, default_settings['paths'][f'package_images_folder_path_{i}'])
         
         if not config_manager_instance.get_setting('excel_settings.article_column'):
@@ -161,6 +161,10 @@ config_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'settin
 # Инициализируем глобальный config_manager в модуле config_manager перед инициализацией нашего
 config_manager.init_config_manager(config_folder)
 init_config_manager()
+
+# Загружаем настройки при запуске приложения
+cm = st.session_state.config_manager
+cm.load_settings()
 
 # Настройка параметров приложения
 st.set_page_config(
@@ -359,7 +363,7 @@ def show_settings():
             
             # Сбрасываем пути для изображений товаров
             cm.set_setting('paths.product_images_folder_path_1', product_folder)
-            cm.set_setting('paths.product_images_folder_path_2', "")
+            cm.set_setting('paths.product_images_folder_path_2', r"\\10.10.100.2\pictures")
             cm.set_setting('paths.product_images_folder_path_3', "")
             
             # Сбрасываем пути для изображений упаковок
@@ -1055,6 +1059,10 @@ def process_files():
                 progress_callback=lambda current, total: add_log_message(f"Обработано {current} из {total} строк", "INFO"),
                 max_total_file_size_mb=st.session_state.get('max_file_size_mb', 100)
             )
+
+            # Сохраняем настройки после обработки файла
+            cm = st.session_state.config_manager
+            cm.save_settings()
 
             st.session_state.output_file_path = output_path
             
