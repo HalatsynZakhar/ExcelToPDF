@@ -351,7 +351,7 @@ def show_settings():
                     else:
                         st.warning(f"⚠️ Папка упаковок {i} недоступна. Проверьте путь: {new_path}")
 
-        # Добавляем настройку максимального размера файла
+        # Добавляем настройку максимального размера файла с обработкой изменения
         current_max_size = cm.get_setting('file_settings.max_size_mb', 100)
         max_size_mb = st.number_input(
             "Максимальный размер файла (МБ)",
@@ -359,12 +359,19 @@ def show_settings():
             max_value=1000,
             value=current_max_size,
             step=10,
-            help="Ограничение общего размера файла PDF в мегабайтах"
+            help="Ограничение общего размера файла PDF в мегабайтах",
+            key="max_size_input",
+            on_change=lambda: handle_max_size_change()
         )
-        if max_size_mb != current_max_size:
-            cm.set_setting('file_settings.max_size_mb', max_size_mb)
+        
+        def handle_max_size_change():
+            new_size = st.session_state.max_size_input
+            cm.set_setting('file_settings.max_size_mb', new_size)
             cm.save_settings()
-        st.session_state.max_file_size_mb = max_size_mb
+            st.session_state.max_file_size_mb = new_size
+            # Перезагружаем файл, если он был загружен
+            if st.session_state.get('temp_file_path'):
+                load_excel_file()
         
         # Кнопка сброса путей
         if st.button("Сбросить пути к папкам", key="reset_paths_button"):
@@ -851,8 +858,8 @@ def file_uploader_section():
                     4. Убедитесь, что данные начинаются с первой строки и колонки
                     """)
                 
-            # Если данные успешно загружены, показываем предпросмотр и селекторы колонок
-            if st.session_state.df is not None:
+            # Если данные успешно загружены или файл уже был обработан ранее, показываем интерфейс
+            if st.session_state.df is not None or st.session_state.get('output_file_path'):
                 # Отображение размерности данных
                 col1, col2 = st.columns(2)
                 with col1:
@@ -935,7 +942,7 @@ def file_uploader_section():
                         # Форсируем перезагрузку страницы для обновления UI
                         st.rerun()
                     
-            else:
+            elif not st.session_state.get('output_file_path'):
                 st.warning("Файл не содержит колонок для выбора. Проверьте структуру Excel-файла.")
                 
         else:
