@@ -326,14 +326,13 @@ def show_settings():
                 if new_path != current_path:
                     cm.set_setting(key, new_path)
                     cm.save_settings("Default")
-                    st.rerun()
                     
                 # Проверка доступности пути
                 if new_path:
-                    if not os.path.exists(new_path):
+                    if os.path.exists(new_path):
+                        st.success(f"✓ Путь доступен: {new_path}")
+                    else:
                         st.warning(f"⚠️ Папка товаров {i} недоступна. Проверьте путь: {new_path}")
-                    elif new_path.startswith(r"\\"):
-                        st.warning(f"⚠️ Папка товаров {i} указывает на сетевой диск. Убедитесь в доступности.")
 
         with st.expander("Папки с изображениями упаковок", expanded=True):
             st.markdown("Укажите до 3-х папок с изображениями упаковок.")
@@ -344,14 +343,13 @@ def show_settings():
                 if new_path != current_path:
                     cm.set_setting(key, new_path)
                     cm.save_settings("Default")
-                    st.rerun()
                     
                 # Проверка доступности пути
                 if new_path:
-                    if not os.path.exists(new_path):
+                    if os.path.exists(new_path):
+                        st.success(f"✓ Путь доступен: {new_path}")
+                    else:
                         st.warning(f"⚠️ Папка упаковок {i} недоступна. Проверьте путь: {new_path}")
-                    elif new_path.startswith(r"\\"):
-                        st.warning(f"⚠️ Папка упаковок {i} указывает на сетевой диск. Убедитесь в доступности.")
 
         # Добавляем настройку максимального размера файла
         current_max_size = cm.get_setting('file_settings.max_size_mb', 100)
