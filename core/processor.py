@@ -359,8 +359,12 @@ def process_excel_file(
     
     print("[PROCESSOR] --- Начало итерации по строкам DataFrame ---", file=sys.stderr)
     
+    # Сбрасываем кеш качества перед обработкой нового файла
+    from utils.image_utils import cached_quality
+    cached_quality = None
+    print("[PROCESSOR] Кеш качества изображений сброшен", file=sys.stderr)
+    
     # Переменные для определения оптимального качества сжатия
-    first_image_processed = False
     successful_quality = DEFAULT_IMG_QUALITY  # Если не найдено, используем значение по умолчанию
     quality_determined = False  # Флаг, указывающий, был ли определен уровень качества
     
@@ -473,97 +477,14 @@ def process_excel_file(
                     
                     # Помечаем что определили качество
                     quality_determined = True
-                    
-                    # После успешной оптимизации первого изображения определяем качество,
-                    # которое лучше всего подошло
-                    if optimized_buffer and optimized_buffer.getbuffer().nbytes > 0:
-                        # Мы можем полагаться только на лог-сообщения для определения качества
-                        # Находим в логах последнюю строку с "Итоговое качество сжатия"
-                        try:
-                            # Сначала попытаемся прочитать текущий stderr буфер, если это возможно
-                            quality_found = False
-                            
-                            # Попытка найти в логах
-                            with open("logs/app_latest.log", "r", encoding="utf-8") as log_file:
-                                log_lines = log_file.readlines()
-                                # Ищем два типа строк с информацией о качестве
-                                quality_pattern1 = re.compile(r'\[optimize_excel\] Итоговое качество сжатия: (\d+)%')
-                                quality_pattern2 = re.compile(r'-> Успех! Размер .* c качеством (\d+)')
-                                # Добавляем поиск специального маркера
-                                quality_marker = re.compile(r'\[QUALITY_MARKER\] НАЙДЕНО_КАЧЕСТВО_ДЛЯ_ИЗОБРАЖЕНИЯ: (\d+)')
-                                
-                                # Сначала ищем в последних 100 строках (самая свежая информация)
-                                recent_lines = log_lines[-100:] if len(log_lines) > 100 else log_lines
-                                
-                                for line in reversed(recent_lines):
-                                    # Приоритетно ищем специальный маркер
-                                    match = quality_marker.search(line)
-                                    if match:
-                                        found_quality = int(match.group(1))
-                                        successful_quality = found_quality
-                                        print(f"[PROCESSOR]   НАЙДЕН СПЕЦИАЛЬНЫЙ МАРКЕР КАЧЕСТВА: {successful_quality}%", file=sys.stderr)
-                                        quality_found = True
-                                        break
-                                        
-                                    match = quality_pattern1.search(line)
-                                    if match:
-                                        found_quality = int(match.group(1))
-                                        successful_quality = found_quality
-                                        print(f"[PROCESSOR]   Определено оптимальное качество из последних логов (pattern 1): {successful_quality}%", file=sys.stderr)
-                                        quality_found = True
-                                        break
-                                        
-                                    match = quality_pattern2.search(line)
-                                    if match:
-                                        found_quality = int(match.group(1))
-                                        successful_quality = found_quality
-                                        print(f"[PROCESSOR]   Определено оптимальное качество из последних логов (pattern 2): {successful_quality}%", file=sys.stderr)
-                                        quality_found = True
-                                        break
-                                
-                                # Если не нашли в последних строках, ищем во всем файле
-                                if not quality_found:
-                                    print(f"[PROCESSOR]   Качество не найдено в последних строках логов, ищем во всем файле...", file=sys.stderr)
-                                    for line in reversed(log_lines):
-                                        match = quality_pattern1.search(line)
-                                        if match:
-                                            found_quality = int(match.group(1))
-                                            successful_quality = found_quality
-                                            print(f"[PROCESSOR]   Определено оптимальное качество из всех логов: {successful_quality}%", file=sys.stderr)
-                                            quality_found = True
-                                            break
-                                
-                                # Если все еще не нашли, попробуем прочитать из временного файла
-                                if not quality_found:
-                                    try:
-                                        temp_quality_file = os.path.join(tempfile.gettempdir(), "last_image_quality.txt")
-                                        if os.path.exists(temp_quality_file):
-                                            with open(temp_quality_file, "r") as qf:
-                                                file_quality = int(qf.read().strip())
-                                                successful_quality = file_quality
-                                                print(f"[PROCESSOR]   Определено качество из временного файла: {successful_quality}%", file=sys.stderr)
-                                                quality_found = True
-                                    except Exception as file_err:
-                                        print(f"[PROCESSOR]   Ошибка чтения временного файла с качеством: {file_err}", file=sys.stderr)
-                                
-                                # Если все еще не нашли, используем мин. значение
-                                if not quality_found:
-                                    successful_quality = MIN_IMG_QUALITY  # Прямое использование мин. качества
-                                    print(f"[PROCESSOR]   Качество не найдено в логах. Используем минимальное значение: {successful_quality}%", file=sys.stderr)
-                        except Exception as log_e:
-                            print(f"[PROCESSOR WARNING]   Ошибка при чтении лог-файла: {log_e}. Используем минимальное качество.", file=sys.stderr)
-                            successful_quality = MIN_IMG_QUALITY  # Минимальное качество без добавления
-                    
-                    # Сообщаем о выбранном качестве для всех последующих изображений
-                    print(f"[PROCESSOR]   ВАЖНО: Для всех последующих изображений будет использовано качество {successful_quality}%", file=sys.stderr)
                 else:
-                    # Для всех последующих изображений используем найденное качество
-                    print(f"[PROCESSOR]   Используем найденное качество {successful_quality}% для изображения {image_path}", file=sys.stderr)
+                    # Для всех последующих изображений используем кешированное качество
+                    print(f"[PROCESSOR]   Используем кешированное качество для изображения {image_path}", file=sys.stderr)
                     optimized_buffer = image_utils.optimize_image_for_excel(
                         image_path, 
                         target_size_kb=target_kb_per_image,
-                        quality=successful_quality,  # Начальное = найденное качество 
-                        min_quality=successful_quality  # Мин. качество = найденное качество (без итераций)
+                        quality=DEFAULT_IMG_QUALITY,
+                        min_quality=MIN_IMG_QUALITY    
                     )
             except Exception as e:
                 print(f"[PROCESSOR ERROR]   Ошибка при оптимизации изображения: {e}", file=sys.stderr)
