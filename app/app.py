@@ -339,6 +339,17 @@ def show_settings():
                         st.warning(f"⚠️ Папка упаковок {i} недоступна. Проверьте путь: {new_path}")
                     elif new_path.startswith(r"\\"):
                         st.warning(f"⚠️ Папка упаковок {i} указывает на сетевой диск. Убедитесь в доступности.")
+
+        # Добавляем настройку максимального размера файла
+        max_size_mb = st.number_input(
+            "Максимальный размер файла (МБ)",
+            min_value=10,
+            max_value=1000,
+            value=100,
+            step=10,
+            help="Ограничение общего размера файла PDF в мегабайтах"
+        )
+        st.session_state.max_file_size_mb = max_size_mb
         
         # Кнопка сброса путей
         if st.button("Сбросить пути к папкам", key="reset_paths_button"):
@@ -1041,7 +1052,8 @@ def process_files():
                 product_image_folders=product_image_folders,
                 package_image_folders=package_image_folders,
                 output_folder=temp_dir,
-                progress_callback=lambda current, total: add_log_message(f"Обработано {current} из {total} строк", "INFO")
+                progress_callback=lambda current, total: add_log_message(f"Обработано {current} из {total} строк", "INFO"),
+                max_total_file_size_mb=st.session_state.get('max_file_size_mb', 100)
             )
 
             st.session_state.output_file_path = output_path

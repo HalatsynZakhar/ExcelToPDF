@@ -345,7 +345,6 @@ def process_excel_file(
     except Exception as e:
         print(f"[PROCESSOR WARNING] Не удалось определить ширину столбца {image_col_letter_excel}: {e}", file=sys.stderr)
 
-
     # --- Обработка строк и вставка изображений ---
     images_inserted = 0
     rows_processed = 0
@@ -906,6 +905,7 @@ def create_pdf_cards(
     package_image_folders: List[str],
     output_folder: str,
     progress_callback: callable = None,
+    max_total_file_size_mb: int = 100,
 ) -> Tuple[str, int, List[str]]:
     """
     Создает PDF-файл с карточками товаров.
@@ -959,6 +959,17 @@ def create_pdf_cards(
         product_img_path = find_image_path(article, product_image_folders)
         package_img_path = find_image_path(article, package_image_folders)
 
+        # Рассчитываем лимит размера на изображение
+        article_count = len(data_df)
+        if article_count == 0:
+            article_count = 1  # Избегаем деления на ноль
+            
+        image_size_budget_mb = max_total_file_size_mb * SIZE_BUDGET_FACTOR
+        target_kb_per_image = (image_size_budget_mb * 1024) / article_count if article_count > 0 else MAX_KB_PER_IMAGE
+        target_kb_per_image = max(MIN_KB_PER_IMAGE, min(target_kb_per_image, MAX_KB_PER_IMAGE))
+        
+        logger.debug(f"Лимит размера на изображение: {target_kb_per_image:.1f} КБ")
+
         # Создаем страницу для каждого артикула, даже если изображения отсутствуют
         pdf.add_page()
         
@@ -969,12 +980,34 @@ def create_pdf_cards(
         # Добавляем изображения, только если они были найдены
         if product_img_path:
             try:
-                pdf.image(product_img_path, x=5, y=5, w=40)
+                # Оптимизируем изображение перед вставкой
+                optimized_buffer = image_utils.optimize_image_for_excel(
+                    product_img_path,
+                    target_size_kb=target_kb_per_image,
+                    quality=DEFAULT_IMG_QUALITY,
+                    min_quality=MIN_IMG_QUALITY
+                )
+                temp_img_path = os.path.join(tempfile.gettempdir(), f"temp_product_{article}.jpg")
+                with open(temp_img_path, "wb") as f:
+                    f.write(optimized_buffer.getvalue())
+                pdf.image(temp_img_path, x=5, y=5, w=40)
+                os.remove(temp_img_path)
             except Exception as e:
                 logger.error(f"Ошибка при вставке изображения товара '{product_img_path}' для артикула '{article}': {e}")
         if package_img_path:
             try:
-                pdf.image(package_img_path, x=45, y=5, w=40)
+                # Оптимизируем изображение перед вставкой
+                optimized_buffer = image_utils.optimize_image_for_excel(
+                    package_img_path,
+                    target_size_kb=target_kb_per_image,
+                    quality=DEFAULT_IMG_QUALITY,
+                    min_quality=MIN_IMG_QUALITY
+                )
+                temp_img_path = os.path.join(tempfile.gettempdir(), f"temp_package_{article}.jpg")
+                with open(temp_img_path, "wb") as f:
+                    f.write(optimized_buffer.getvalue())
+                pdf.image(temp_img_path, x=45, y=5, w=40)
+                os.remove(temp_img_path)
             except Exception as e:
                 logger.error(f"Ошибка при вставке изображения упаковки '{package_img_path}' для артикула '{article}': {e}")
 
