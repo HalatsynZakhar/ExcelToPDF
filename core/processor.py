@@ -1001,13 +1001,16 @@ def create_pdf_cards(
         # Используем заголовки из первой строки и значения из текущей строки
         for i in range(len(row)):
             cell_value = str(row.iloc[i]).strip()
-            if cell_value and cell_value.lower() != 'nan':
-                # Получаем заголовок для текущей колонки
-                header = headers[i] if i < len(headers) else f"Столбец {i+1}"
-                header = str(header).strip()
-                if header and header.lower() != 'nan':
-                    # Добавляем заголовок и значение как отдельные элементы для таблицы
-                    text_lines.append({"header": header, "value": cell_value})
+            # Получаем заголовок для текущей колонки
+            header = headers[i] if i < len(headers) else f"Столбец {i+1}"
+            header = str(header).strip()
+            # Проверяем только заголовок, а не значение ячейки
+            if header and header.lower() != 'nan':
+                # Если значение пустое или 'nan', заменяем его пробелом
+                if not cell_value or cell_value.lower() == 'nan':
+                    cell_value = " "
+                # Добавляем заголовок и значение как отдельные элементы для таблицы
+                text_lines.append({"header": header, "value": cell_value})
 
         # --- Dynamically adjust font size and column width ---
         available_width = pdf.w - pdf.l_margin - pdf.r_margin
