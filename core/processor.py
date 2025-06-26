@@ -859,6 +859,8 @@ def create_pdf_cards(
     output_folder: str,
     progress_callback: callable = None,
     max_total_file_size_mb: int = 100,
+    original_file_name: str = None,
+    sheet_name: str = None,
 ) -> Tuple[str, int, List[str]]:
     """
     Создает PDF-файл с карточками товаров.
@@ -1236,7 +1238,17 @@ def create_pdf_cards(
 
     # Проверяем, есть ли страницы в PDF
     if pdf.page > 0:
-        output_filename = f"product_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        # Формируем имя файла в формате: <Название исходного файла>_<Имя листа эксель>_<метка времени>
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        if original_file_name and sheet_name:
+            # Получаем имя файла без расширения
+            base_name = os.path.splitext(os.path.basename(original_file_name))[0]
+            output_filename = f"{base_name}_{sheet_name}_{timestamp}.pdf"
+        else:
+            # Если не переданы имя файла или имя листа, используем стандартное имя
+            output_filename = f"product_cards_{timestamp}.pdf"
+            
         output_path = os.path.join(output_folder, output_filename)
         pdf.output(output_path)
     else:

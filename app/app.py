@@ -1105,7 +1105,9 @@ def process_files():
                 package_image_folders=package_image_folders,
                 output_folder=temp_dir,
                 progress_callback=lambda current, total: add_log_message(f"Обработано {current} из {total} строк", "INFO"),
-                max_total_file_size_mb=st.session_state.get('max_file_size_mb', 100)
+                max_total_file_size_mb=st.session_state.get('max_file_size_mb', 100),
+                original_file_name=st.session_state.temp_file_path,
+                sheet_name=st.session_state.selected_sheet
             )
 
             # Сохраняем настройки после успешной обработки
