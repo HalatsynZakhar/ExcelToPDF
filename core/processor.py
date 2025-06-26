@@ -865,6 +865,7 @@ def create_pdf_cards(
     """
     Создает PDF-файл с карточками товаров.
     """
+    import math  # Импортируем math для проверки на NaN
     image_utils.cached_quality = None # Reset cached quality for each new processing session
 
     pdf = FPDF(orientation='P', unit='mm', format=(90, 160))
@@ -1002,17 +1003,29 @@ def create_pdf_cards(
         text_lines = []
         # Используем заголовки из первой строки и значения из текущей строки
         for i in range(len(row)):
-            cell_value = str(row.iloc[i]).strip()
+            # Получаем значение ячейки
+            raw_value = row.iloc[i]
+            # Проверяем на NaN
+            if isinstance(raw_value, (int, float)) and not math.isnan(raw_value):
+                # Если число целое, отображаем без десятичной части
+                if raw_value == int(raw_value):
+                    cell_value = str(int(raw_value)).strip()
+                else:
+                    cell_value = str(raw_value).strip()
+            else:
+                # Если значение NaN или не число, преобразуем в строку
+                cell_value = str(raw_value).strip()
             # Получаем заголовок для текущей колонки
             header = headers[i] if i < len(headers) else f"Столбец {i+1}"
             header = str(header).strip()
-            # Проверяем только заголовок, а не значение ячейки
-            if header and header.lower() != 'nan':
-                # Если значение пустое или 'nan', заменяем его пробелом
-                if not cell_value or cell_value.lower() == 'nan':
-                    cell_value = " "
-                # Добавляем заголовок и значение как отдельные элементы для таблицы
-                text_lines.append({"header": header, "value": cell_value})
+            # Проверяем заголовок, если он пустой или 'nan', заменяем его пробелом
+            if not header or header.lower() == 'nan':
+                header = " "
+            # Если значение пустое или 'nan', заменяем его пробелом
+            if not cell_value or cell_value.lower() == 'nan':
+                cell_value = " "
+            # Добавляем заголовок и значение как отдельные элементы для таблицы
+            text_lines.append({"header": header, "value": cell_value})
 
         # --- Dynamically adjust font size and column width ---
         available_width = pdf.w - pdf.l_margin - pdf.r_margin
