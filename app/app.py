@@ -77,22 +77,12 @@ sys.stderr.reconfigure(encoding='utf-8')
 log = logging.getLogger(__name__)
 
 # Определяем настройки по умолчанию
-def get_downloads_folder():
-    """Получить путь к папке с изображениями товаров по умолчанию"""
-    # Возвращаем сетевой путь к папке с изображениями товаров
-    return r"\\10.10.100.2\Foto"
-
-def get_package_folder():
-    """Получить путь к папке с изображениями упаковок по умолчанию"""
-    # Возвращаем сетевой путь к папке с изображениями упаковок
-    return r"\\10.10.100.2\FotoPack"
-
 default_settings = {
     "paths": {
-        "product_images_folder_path_1": get_downloads_folder(),  # Путь к папке с изображениями товаров (Foto)
-        "product_images_folder_path_2": r"\\10.10.100.2\pictures",
+        "product_images_folder_path_1": "",
+        "product_images_folder_path_2": "",
         "product_images_folder_path_3": "",
-        "package_images_folder_path_1": get_package_folder(),    # Путь к папке с изображениями упаковок (FotoPack)
+        "package_images_folder_path_1": "",
         "package_images_folder_path_2": "",
         "package_images_folder_path_3": ""
     },
@@ -173,7 +163,7 @@ init_config_manager()
 
 # Загружаем настройки при запуске приложения
 cm = st.session_state.config_manager
-cm.load_settings()
+
 
 # Настройка параметров приложения
 st.set_page_config(
@@ -388,9 +378,7 @@ def show_settings():
             cm.set_setting('paths.product_images_folder_path_3', "")
             
             # Сбрасываем пути для изображений упаковок
-            cm.set_setting('paths.package_images_folder_path_1', package_folder)
-            cm.set_setting('paths.package_images_folder_path_2', "")
-            cm.set_setting('paths.package_images_folder_path_3', "")
+            cm.reset_settings()
             
             cm.save_settings("Default")
             st.success("Пути к папкам сброшены до значений по умолчанию")
