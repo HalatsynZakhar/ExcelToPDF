@@ -38,17 +38,15 @@ class ConfigManager:
         """
         self.current_settings = {
             "excel_settings": {
-                "article_column": "C",
-                "image_column": "A",
                 "start_row": 2,
                 "adjust_dimensions": True
             },
             "image_settings": {
-                "max_size_kb": 100,
-                "quality": 90,
+                "max_size_kb": 2000,
+                "quality": 100,
                 "target_width": 300,
                 "target_height": 300,
-                "supported_extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp"]
+                "supported_extensions": [".jpg"]
             },
             "ui_settings": {
                 "show_preview": True,
