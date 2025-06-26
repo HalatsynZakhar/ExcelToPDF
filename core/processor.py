@@ -874,16 +874,16 @@ def create_pdf_cards(
         pdf.add_font(font_family, '', 'C:/Windows/Fonts/arial.ttf', uni=True)
         # Добавляем жирный шрифт
         pdf.add_font(font_family, 'B', 'C:/Windows/Fonts/arialbd.ttf', uni=True)
-        pdf.set_font(font_family, '', 12)  # Уменьшен размер шрифта по умолчанию для оптимизации пространства
+        pdf.set_font(font_family, '', 14)  # Увеличен стандартный размер шрифта для лучшей читаемости
     except RuntimeError as e:
         logger.warning(f"Не удалось загрузить шрифт Arial: {e}. Используется стандартный шрифт, кириллица может не отображаться.")
         # Fallback to a core font, which may not render Cyrillic correctly
         font_family = 'Helvetica'
-        pdf.set_font(font_family, '', 12)  # Уменьшен размер шрифта по умолчанию для оптимизации пространства
+        pdf.set_font(font_family, '', 14)  # Увеличен стандартный размер шрифта для лучшей читаемости
         
     # Определяем запас по высоте для предотвращения выхода текста за границы страницы
     # Оставляем запас в 4 строки текста при стандартном размере шрифта
-    safety_margin = 4 * 12  # 4 строки по 12 пунктов (максимальный размер шрифта)
+    safety_margin = 4 * 14  # 4 строки по 14 пунктов (максимальный размер шрифта)
 
     inserted_cards = 0
     not_found_articles = []
@@ -1009,7 +1009,7 @@ def create_pdf_cards(
         # Определяем минимальную необходимую ширину заголовка для динамического расчета ширины колонок
         max_header_width = 0
         for item in text_lines:
-            pdf.set_font(font_family, 'B', 12)  # Используем максимальный размер шрифта для оценки (уменьшен для оптимизации пространства)
+            pdf.set_font(font_family, 'B', 14)  # Используем максимальный размер шрифта для оценки
             header_width = pdf.get_string_width(item['header'])
             max_header_width = max(max_header_width, header_width)
 
@@ -1026,7 +1026,7 @@ def create_pdf_cards(
             # Начинаем с меньшего размера шрифта для большого количества колонок
             font_size_range = range(8, 3, -1)  # Уменьшаем до 4 пунктов, начиная с 8
         else:
-            font_size_range = range(12, 5, -1)  # Уменьшенный стандартный диапазон для оптимизации пространства
+            font_size_range = range(14, 5, -1)  # Стандартный диапазон начинается с увеличенного размера шрифта
 
         # Iterate from a reasonable max down to a min font size to find the best fit
         for test_font_size in font_size_range:
