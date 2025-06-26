@@ -1155,10 +1155,13 @@ def create_pdf_cards(
                 current_font_size = pdf.font_size
                 current_font_style = pdf.font_style
                 
+
+
                 pdf.set_text_color(255, 0, 0)  # Устанавливаем красный цвет
                 pdf.set_font(font_family, 'B', 14)  # Жирный шрифт для стрелок
-                pdf.set_xy(10, current_y + 2)  # Позиционируем стрелки ниже последнего элемента
-                pdf.cell(70, 10, txt="→→→ Продовження на наст. сторінці →→→", align='C')
+                pdf.set_xy(10, current_y - 5)  # Позиционируем стрелки ниже последнего элемента
+                pdf.cell(70, 10, txt="Продовження на наст. сторінці", align='C')
+
                 
                 # Восстанавливаем настройки шрифта и цвета
                 pdf.set_text_color(0, 0, 0)  # Возвращаем черный цвет
