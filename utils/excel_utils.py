@@ -1152,12 +1152,15 @@ def insert_images_to_excel(writer, df, image_column):
         logger.error(f"Ошибка при вставке изображений в Excel: {e}")
         return False
 
-def save_dataframe_with_images(excel_file: str, df: pd.DataFrame, 
+import utils.image_utils as image_utils
+
+def save_dataframe_with_images(excel_file: str, df: pd.DataFrame,
                          article_column: str, image_column: str, images_folder: str,
-                         max_size_kb: int = 100, 
+                         max_size_kb: int = 100,
                          adjust_cell_size: bool = True,
                          row_height: int = 120,
                          find_images_recursive: bool = True) -> Dict[str, Any]:
+    image_utils.cached_quality = None # Reset cached quality for this processing session
     """
     Сохраняет DataFrame в Excel файл с изображениями на основе артикулов
     

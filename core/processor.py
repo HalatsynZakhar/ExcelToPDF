@@ -26,6 +26,7 @@ if parent_dir not in sys.path:
 from utils import config_manager
 from utils import excel_utils
 from utils import image_utils
+import utils.image_utils as image_utils
 
 # Import get_downloads_folder from config_manager
 from utils.config_manager import get_downloads_folder
@@ -361,7 +362,7 @@ def process_excel_file(
     
     # Сбрасываем кеш качества перед обработкой нового файла
     from utils.image_utils import cached_quality
-    cached_quality = None
+    image_utils.cached_quality = None
     print("[PROCESSOR] Кеш качества изображений сброшен", file=sys.stderr)
     
     # Переменные для определения оптимального качества сжатия
@@ -831,6 +832,8 @@ def create_pdf_cards(
     """
     Создает PDF-файл с карточками товаров.
     """
+    image_utils.cached_quality = None # Reset cached quality for each new processing session
+
     pdf = FPDF(orientation='P', unit='mm', format=(90, 160))
     
     # Используем шрифт Arial, который стандартно установлен в Windows

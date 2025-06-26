@@ -373,6 +373,9 @@ def show_settings():
             if st.session_state.get('temp_file_path'):
                 load_excel_file()
         
+        # Ensure max_file_size_mb in session_state is always up-to-date
+        st.session_state.max_file_size_mb = cm.get_setting('file_settings.max_size_mb', 100)
+        
         # Кнопка сброса путей
         if st.button("Сбросить пути к папкам", key="reset_paths_button"):
             # Устанавливаем пути по умолчанию
@@ -381,7 +384,7 @@ def show_settings():
             
             # Сбрасываем пути для изображений товаров
             cm.set_setting('paths.product_images_folder_path_1', product_folder)
-            cm.set_setting('paths.product_images_folder_path_2', r"\\10.10.100.2\pictures")
+
             cm.set_setting('paths.product_images_folder_path_3', "")
             
             # Сбрасываем пути для изображений упаковок
@@ -397,6 +400,11 @@ def show_settings():
 def load_excel_file(uploaded_file_arg=None):
     # Используем файл из session_state, если аргумент не передан (для on_change)
     uploaded_file = uploaded_file_arg if uploaded_file_arg else st.session_state.get('file_uploader')
+    
+    # Ensure max_file_size_mb in session_state is always up-to-date when loading/reloading file
+    cm = st.session_state.config_manager
+    st.session_state.max_file_size_mb = cm.get_setting('file_settings.max_size_mb', 100)
+
     if not uploaded_file:
         # Если файл удален из загрузчика
         log.warning("Файл был удален из загрузчика.")
@@ -1024,6 +1032,10 @@ def process_files():
         
         # Проверяем доступность путей к папкам с изображениями
         cm = st.session_state.config_manager
+        
+        # Ensure max_file_size_mb in session_state is always up-to-date before processing
+        st.session_state.max_file_size_mb = cm.get_setting('file_settings.max_size_mb', 100)
+
         missing_folders = []
         
         for i in range(1, 4):
