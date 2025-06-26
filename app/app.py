@@ -79,12 +79,12 @@ log = logging.getLogger(__name__)
 # Определяем настройки по умолчанию
 default_settings = {
     "paths": {
-        "product_images_folder_path_1": "",
-        "product_images_folder_path_2": "",
-        "product_images_folder_path_3": "",
-        "package_images_folder_path_1": "",
-        "package_images_folder_path_2": "",
-        "package_images_folder_path_3": ""
+                "product_images_folder_path_1": "",
+                "product_images_folder_path_2": "",
+                "product_images_folder_path_3": "",
+                "package_images_folder_path_1": "",
+                "package_images_folder_path_2": "",
+                "package_images_folder_path_3": ""
     },
     "excel_settings": {
         "article_column": "A"
@@ -366,22 +366,34 @@ def show_settings():
         # Ensure max_file_size_mb in session_state is always up-to-date
         st.session_state.max_file_size_mb = cm.get_setting('file_settings.max_size_mb', 100)
         
-        # Кнопка сброса путей
-        if st.button("Сбросить пути к папкам", key="reset_paths_button"):
-            # Устанавливаем пути по умолчанию
-            product_folder = get_downloads_folder()  # Путь к папке с изображениями товаров
-            package_folder = get_package_folder()    # Путь к папке с изображениями упаковок
+        # Кнопка сброса всех путей к папкам
+        if st.button("Сбросить все пути к папкам", key="reset_paths_button"):
+            # Устанавливаем пути к папкам из значений по умолчанию
+            # Жестко закодированные значения из config_manager.py
+            default_paths = {
+                "product_images_folder_path_1": "\\\\10.10.100.2\\Foto",
+                "product_images_folder_path_2": "\\\\10.10.100.2\\pictures",
+                "product_images_folder_path_3": "",
+                "package_images_folder_path_1": "\\\\10.10.100.2\\FotoPack",
+                "package_images_folder_path_2": "",
+                "package_images_folder_path_3": ""
+            }
             
-            # Сбрасываем пути для изображений товаров
-            cm.set_setting('paths.product_images_folder_path_1', product_folder)
-
-            cm.set_setting('paths.product_images_folder_path_3', "")
+            # Устанавливаем пути к папкам из значений по умолчанию
+            for i in range(1, 4):
+                cm.set_setting(
+                    f'paths.product_images_folder_path_{i}', 
+                    default_paths[f'product_images_folder_path_{i}']
+                )
+                cm.set_setting(
+                    f'paths.package_images_folder_path_{i}', 
+                    default_paths[f'package_images_folder_path_{i}']
+                )
             
-            # Сбрасываем пути для изображений упаковок
-            cm.reset_settings()
-            
+            # Сохраняем настройки
             cm.save_settings("Default")
-            st.success("Пути к папкам сброшены до значений по умолчанию")
+            st.success("Все пути к папкам сброшены до значений по умолчанию")
+            # Перезагружаем страницу для обновления интерфейса
             st.rerun()
 
 # Функция для загрузки Excel файла

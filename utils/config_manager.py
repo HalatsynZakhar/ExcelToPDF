@@ -52,14 +52,15 @@ class ConfigManager:
         """
         return {
             "paths": {
-                "input_file_path": "",
-                "output_folder_path": "",
-                "images_folder_path": "",
-                "secondary_images_folder_path": "",  # Путь к папке с запасными изображениями (второй приоритет)
-                "tertiary_images_folder_path": ""    # Путь к папке с дополнительными запасными изображениями (третий приоритет)
+                "product_images_folder_path_1": "\\\\10.10.100.2\\Foto",
+                "product_images_folder_path_2": "\\\\10.10.100.2\\pictures",
+                "product_images_folder_path_3": "",
+                "package_images_folder_path_1": "\\\\10.10.100.2\\FotoPack",
+                "package_images_folder_path_2": "",
+                "package_images_folder_path_3": ""
             },
             "excel_settings": {
-                "article_column": "C",  # Столбец с артикулами
+                "article_column": "A",  # Столбец с артикулами
                 "image_column": "A",    # Столбец для вставки изображений
                 "start_row": 2,         # Начальная строка (обычно заголовки в 1-й строке)
                 "adjust_dimensions": True  # Настраивать размеры строк и столбцов
@@ -70,8 +71,11 @@ class ConfigManager:
                 "min_quality": 5,       # Минимальное качество JPEG (снижено для большего сжатия)
                 "target_width": 300,    # Целевая ширина изображения
                 "target_height": 300,   # Целевая высота изображения
-                "supported_extensions": [".jpg", ".jpeg", ".png", ".gif", ".bmp"],
+                "supported_extensions": [".jpg"],
                 "resize_enabled": True
+            },
+            "file_settings": {
+                "max_size_mb": 100      # Максимальный размер файла в МБ
             },
             "ui_settings": {
                 "theme": "light",
@@ -214,7 +218,12 @@ class ConfigManager:
         """
         Сбрасывает настройки до значений по умолчанию.
         """
+        # Получаем актуальные настройки по умолчанию
+        self.default_settings = self._get_default_settings()
+        
+        # Сбрасываем текущие настройки до значений по умолчанию
         self.current_settings = copy.deepcopy(self.default_settings)
+        
         self.current_preset_name = "Default"
         logger.info("Настройки сброшены до значений по умолчанию")
     
@@ -452,4 +461,4 @@ def import_settings(file_path: str) -> bool:
     Returns:
         True, если настройки успешно импортированы, иначе False
     """
-    return get_config_manager().import_settings(file_path) 
+    return get_config_manager().import_settings(file_path)
