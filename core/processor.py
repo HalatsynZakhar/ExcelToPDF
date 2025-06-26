@@ -782,9 +782,9 @@ def find_image_path(article: str, folders: List[str]) -> Optional[str]:
 def _force_wrap_text(pdf: FPDF, text: str, max_width: float) -> str:
     """
     A robust text processing function that prepares text for FPDF's multi_cell.
-    It ensures no single token (word) is wider than max_width.
+    It ensures text fits within the cell width without breaking words across lines.
     1. Replaces any single character that is too wide with '?'.
-    2. Breaks any remaining words that are too wide by inserting spaces.
+    2. Keeps words intact for dynamic font sizing in create_pdf_cards.
     """
     safe_words = []
     # Replace non-breaking spaces and strip text as a precaution
@@ -798,25 +798,13 @@ def _force_wrap_text(pdf: FPDF, text: str, max_width: float) -> str:
         sanitized_word = ""
         for char in word:
             if pdf.get_string_width(char) > max_width:
-                logger.warning(f"A single character ('{char}') was wider than the cell and has been replaced by '?'.")
+                logger.warning(f"A single character ('{char}') was wider than the cell and has been replaced by '?'.") 
                 sanitized_word += "?"
             else:
                 sanitized_word += char
         
-        # 2. Break the sanitized word if it's still too long
-        if pdf.get_string_width(sanitized_word) > max_width:
-            processed_word = ""
-            current_chunk = ""
-            for char in sanitized_word:
-                if pdf.get_string_width(current_chunk + char) <= max_width:
-                    current_chunk += char
-                else:
-                    processed_word += current_chunk + " "
-                    current_chunk = char
-            processed_word += current_chunk
-            safe_words.append(processed_word)
-        else:
-            safe_words.append(sanitized_word)
+        # 2. Keep words intact for dynamic font sizing
+        safe_words.append(sanitized_word)
             
     return " ".join(safe_words)
 
@@ -939,27 +927,41 @@ def create_pdf_cards(
         # Add text
         pdf.set_y(50)
         
-        # Собираем текст из всех ячеек строки, кроме столбца с артикулом
+        # Собираем текст из всех ячеек строки, включая артикул в его исходном порядке
         text_lines = []
-        
         # Используем заголовки из первой строки и значения из текущей строки
         for i in range(len(row)):
-            if i != article_col_idx:
-                cell_value = str(row.iloc[i]).strip()
-                if cell_value and cell_value.lower() != 'nan':
-                    # Получаем заголовок для текущей колонки
-                    header = headers[i] if i < len(headers) else f"Столбец {i+1}"
-                    header = str(header).strip()
-                    if header and header.lower() != 'nan':
-                        # Добавляем заголовок и значение как отдельные элементы для таблицы
-                        text_lines.append({"header": header, "value": cell_value})
+            cell_value = str(row.iloc[i]).strip()
+            if cell_value and cell_value.lower() != 'nan':
+                # Получаем заголовок для текущей колонки
+                header = headers[i] if i < len(headers) else f"Столбец {i+1}"
+                header = str(header).strip()
+                if header and header.lower() != 'nan':
+                    # Добавляем заголовок и значение как отдельные элементы для таблицы
+                    text_lines.append({"header": header, "value": cell_value})
 
-        # --- Dynamically adjust font size ---
+        # --- Dynamically adjust font size and column width ---
         available_width = pdf.w - pdf.l_margin - pdf.r_margin
         available_height = 155 - pdf.y 
 
         best_font_size = 0
         final_lines_to_render = []
+
+        # Функция для проверки, помещается ли текст в одну строку
+        def text_fits_in_one_line(font_size, text, max_width):
+            pdf.set_font_size(font_size)
+            return pdf.get_string_width(text) <= max_width
+
+        # Определяем максимальную ширину заголовка для динамического расчета ширины колонок
+        max_header_width = 0
+        for item in text_lines:
+            pdf.set_font(font_family, 'B', 14)  # Используем максимальный размер шрифта для оценки
+            header_width = pdf.get_string_width(item['header'])
+            max_header_width = max(max_header_width, header_width)
+
+        # Ограничиваем максимальную ширину заголовка до 40% от доступной ширины
+        max_header_width = min(max_header_width + 10, available_width * 0.4)  # +10 для отступа
+        value_width = available_width - max_header_width - 10  # -10 для отступа между колонками
 
         # Iterate from a reasonable max down to a min font size to find the best fit
         for test_font_size in range(14, 5, -1):
@@ -967,11 +969,22 @@ def create_pdf_cards(
             
             all_processed_lines = []
             total_height = 0
+            fits_in_one_line = True
             
             for item in text_lines:
                 # Обрабатываем заголовок и значение отдельно
-                safe_header = _force_wrap_text(pdf, item['header'], available_width/2 - 5)  # Половина ширины минус отступ
-                safe_value = _force_wrap_text(pdf, item['value'], available_width/2 - 5)
+                safe_header = _force_wrap_text(pdf, item['header'], max_header_width)
+                safe_value = _force_wrap_text(pdf, item['value'], value_width)
+                
+                # Проверяем, помещается ли текст в одну строку
+                pdf.set_font(font_family, 'B')
+                header_fits = text_fits_in_one_line(test_font_size, safe_header, max_header_width)
+                
+                pdf.set_font(font_family, '')
+                value_fits = text_fits_in_one_line(test_font_size, safe_value, value_width)
+                
+                if not (header_fits and value_fits):
+                    fits_in_one_line = False
                 
                 # Добавляем обработанные строки как словарь
                 all_processed_lines.append({"header": safe_header, "value": safe_value})
@@ -980,11 +993,11 @@ def create_pdf_cards(
             for item in all_processed_lines:
                 # Считаем высоту для заголовка
                 pdf.set_font(font_family, 'B')
-                header_lines = len(pdf.multi_cell(w=available_width/2 - 5, txt=item['header'], split_only=True))
+                header_lines = len(pdf.multi_cell(w=max_header_width, txt=item['header'], split_only=True))
                 
                 # Считаем высоту для значения
                 pdf.set_font(font_family, '')
-                value_lines = len(pdf.multi_cell(w=available_width/2 - 5, txt=item['value'], split_only=True))
+                value_lines = len(pdf.multi_cell(w=value_width, txt=item['value'], split_only=True))
                 
                 # Берем максимальное количество строк (заголовок или значение)
                 max_lines = max(header_lines, value_lines)
@@ -992,11 +1005,14 @@ def create_pdf_cards(
                 # Суммируем высоту (используем максимальное количество строк, так как они будут отображаться рядом)
                 total_height += max_lines * pdf.font_size + 2  # +2 для отступа между строками таблицы
             
-            if total_height < available_height:
+            # Проверяем, что текст помещается по высоте и все строки помещаются в одну строку
+            if total_height < available_height and fits_in_one_line:
                 best_font_size = test_font_size
                 final_lines_to_render = all_processed_lines
                 break 
 
+        # Если не удалось найти размер шрифта, при котором все строки помещаются в одну строку,
+        # выбираем наименьший размер шрифта
         if best_font_size == 0:
             best_font_size = 6
             pdf.set_font_size(best_font_size)
@@ -1004,8 +1020,8 @@ def create_pdf_cards(
             all_processed_lines_fallback = []
             for line in text_lines:
                 # Обрабатываем заголовок и значение отдельно
-                safe_header = _force_wrap_text(pdf, line['header'], available_width/2 - 5)
-                safe_value = _force_wrap_text(pdf, line['value'], available_width/2 - 5)
+                safe_header = _force_wrap_text(pdf, line['header'], max_header_width)
+                safe_value = _force_wrap_text(pdf, line['value'], value_width)
                 
                 # Добавляем обработанные строки как словарь
                 all_processed_lines_fallback.append({'header': safe_header, 'value': safe_value})
@@ -1016,11 +1032,12 @@ def create_pdf_cards(
             for item in final_lines_to_render:
                 # Считаем высоту для заголовка
                 pdf.set_font(font_family, 'B')
-                header_lines = len(pdf.multi_cell(w=available_width/2 - 5, txt=item['header'], split_only=True))
+                header_lines = len(pdf.multi_cell(w=max_header_width, txt=item['header'], split_only=True))
                 
                 # Считаем высоту для значения
                 pdf.set_font(font_family, '')
-                value_lines = len(pdf.multi_cell(w=available_width/2 - 5, txt=item['value'], split_only=True))
+                # Для значений разрешаем перенос по словам
+                value_lines = len(pdf.multi_cell(w=value_width, txt=item['value'], split_only=True))
                 
                 # Берем максимальное количество строк (заголовок или значение)
                 max_lines = max(header_lines, value_lines)
@@ -1029,6 +1046,9 @@ def create_pdf_cards(
                 total_height_fallback += max_lines * pdf.font_size + 1  # +1 для отступа между строками таблицы
             if total_height_fallback > available_height:
                  logger.warning(f"Текст для артикула {article} не помещается по высоте даже с минимальным шрифтом. Возможны искажения.")
+            if not all(text_fits_in_one_line(best_font_size, item['header'], max_header_width) 
+                       for item in final_lines_to_render):
+                 logger.warning(f"Некоторые заголовки для артикула {article} не помещаются в одну строку даже с минимальным шрифтом.")
 
         pdf.set_font_size(best_font_size)
 
@@ -1038,37 +1058,55 @@ def create_pdf_cards(
             x_pos = pdf.get_x()
             y_pos = pdf.get_y()
             
-            # Ширина каждой колонки (половина доступной ширины минус небольшой отступ)
-            col_width = available_width / 2 - 5
-            
             # Устанавливаем жирный шрифт для заголовка (левая колонка)
             pdf.set_font_size(best_font_size)
             pdf.set_font(font_family, 'B')  # B - жирный шрифт
             
-            # Получаем высоту заголовка
-            header_lines = pdf.multi_cell(w=col_width, txt=item['header'], split_only=True)
-            header_height = len(header_lines) * pdf.font_size
+            # Проверяем, помещается ли заголовок в одну строку
+            header_fits = text_fits_in_one_line(best_font_size, item['header'], max_header_width)
             
-            # Получаем высоту значения
-            pdf.set_font(font_family, '')
-            value_lines = pdf.multi_cell(w=col_width, txt=item['value'], split_only=True)
-            value_height = len(value_lines) * pdf.font_size
-            
-            # Определяем максимальную высоту строки
-            max_height = max(header_height, value_height)
+            # Заголовок всегда должен быть в одну строку
+            pdf.set_font(font_family, 'B')
+            header_text = item['header']
+            if not header_fits:
+                # Обрезаем текст, чтобы он поместился в одну строку
+                truncated_header = ""
+                for char in header_text:
+                    if pdf.get_string_width(truncated_header + char + "...") <= max_header_width:
+                        truncated_header += char
+                    else:
+                        break
+                header_text = truncated_header + "..."
             
             # Отрисовываем заголовок (левая колонка)
             pdf.set_xy(x_pos, y_pos)
             pdf.set_font(font_family, 'B')
-            pdf.multi_cell(w=col_width, txt=item['header'], align='L')
+            pdf.cell(w=max_header_width, h=pdf.font_size, txt=header_text, align='L')
             
-            # Отрисовываем значение (правая колонка)
-            pdf.set_xy(x_pos + col_width + 10, y_pos)  # +10 для отступа между колонками
+            # Для значения разрешаем перенос по словам
             pdf.set_font(font_family, '')
-            pdf.multi_cell(w=col_width, txt=item['value'], align='L')
+            value_text = item['value']
             
-            # Перемещаемся на следующую строку с учетом максимальной высоты
-            pdf.set_y(y_pos + max_height + 2)  # +2 для отступа между строками
+            # Отрисовываем значение (правая колонка) с переносом по словам
+            pdf.set_xy(x_pos + max_header_width + 10, y_pos)  # +10 для отступа между колонками
+            
+            # Используем multi_cell для значения, чтобы разрешить перенос по словам
+            value_lines = pdf.multi_cell(w=value_width, h=pdf.font_size, txt=value_text, align='L', split_only=True)
+            
+            # Если значение помещается в одну строку, используем cell для лучшего выравнивания
+            if len(value_lines) == 1:
+                pdf.set_xy(x_pos + max_header_width + 10, y_pos)
+                pdf.cell(w=value_width, h=pdf.font_size, txt=value_text, align='L')
+                # Перемещаемся на следующую строку
+                pdf.set_y(y_pos + pdf.font_size + 2)  # +2 для отступа между строками
+            else:
+                # Если значение не помещается в одну строку, используем multi_cell
+                pdf.set_xy(x_pos + max_header_width + 10, y_pos)
+                line_height = pdf.font_size
+                pdf.multi_cell(w=value_width, h=line_height, txt=value_text, align='L')
+                # Перемещаемся на следующую строку после multi_cell
+                # multi_cell автоматически перемещает курсор вниз, поэтому нам нужно только добавить отступ
+                pdf.set_y(pdf.get_y() + 2)  # +2 для отступа между строками
             
         inserted_cards += 1
 
