@@ -1024,9 +1024,9 @@ def create_pdf_cards(
         if len(text_lines) > 6:  # Уменьшенное пороговое значение для оптимизации пространства
             logger.info(f"Обнаружено большое количество колонок ({len(text_lines)}), уменьшаем шрифт для лучшего размещения.")
             # Начинаем с меньшего размера шрифта для большого количества колонок
-            font_size_range = range(8, 3, -1)  # Уменьшаем до 4 пунктов, начиная с 8
+            font_size_range = range(10, 5, -1)  # Увеличен минимальный размер шрифта с 4 до 6 пунктов, начиная с 10
         else:
-            font_size_range = range(14, 5, -1)  # Стандартный диапазон начинается с увеличенного размера шрифта
+            font_size_range = range(14, 7, -1)  # Стандартный диапазон с увеличенным минимальным размером шрифта до 8 пунктов
 
         # Iterate from a reasonable max down to a min font size to find the best fit
         for test_font_size in font_size_range:
@@ -1129,6 +1129,21 @@ def create_pdf_cards(
             # Проверяем, не достигли ли мы нижней границы страницы
             # Используем то же ограничение, что и при расчете available_height
             if pdf.get_y() > (160 - safety_margin):  # Оставляем отступ от нижнего края с учетом safety_margin
+                # Добавляем красные стрелки, указывающие на продолжение на следующей странице
+                current_y = pdf.get_y()
+                # Сохраняем текущие настройки шрифта
+                current_font_size = pdf.font_size
+                current_font_style = pdf.font_style
+                
+                pdf.set_text_color(255, 0, 0)  # Устанавливаем красный цвет
+                pdf.set_font(font_family, 'B', 14)  # Жирный шрифт для стрелок
+                pdf.set_xy(10, current_y + 2)  # Позиционируем стрелки ниже последнего элемента
+                pdf.cell(70, 10, txt="→→→ Продовження на наст. сторінці →→→", align='C')
+                
+                # Восстанавливаем настройки шрифта и цвета
+                pdf.set_text_color(0, 0, 0)  # Возвращаем черный цвет
+                pdf.set_font(font_family, current_font_style, current_font_size)
+                
                 pdf.add_page()  # Добавляем новую страницу
                 pdf.set_y(10)  # Устанавливаем позицию Y в начало новой страницы
                 page_items_count = 0  # Сбрасываем счетчик элементов на странице
