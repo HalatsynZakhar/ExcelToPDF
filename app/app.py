@@ -866,6 +866,16 @@ def file_uploader_section():
                     4. Убедитесь, что данные начинаются с первой строки и колонки
                     """)
                 
+            # Если есть доступные листы, показываем селектор листов
+            if st.session_state.available_sheets and len(st.session_state.available_sheets) > 0:
+                selected_sheet = st.selectbox(
+                    "Выберите лист для обработки:",
+                    st.session_state.available_sheets,
+                    index=st.session_state.available_sheets.index(st.session_state.selected_sheet) if st.session_state.selected_sheet in st.session_state.available_sheets else 0,
+                    key="sheet_selector",
+                    on_change=handle_sheet_change
+                )
+                
             # Если данные успешно загружены или файл уже был обработан ранее, показываем интерфейс
             if st.session_state.df is not None or st.session_state.get('output_file_path'):
                 # Отображение размерности данных
