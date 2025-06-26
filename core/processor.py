@@ -52,6 +52,13 @@ EXCEL_PX_TO_PT_RATIO = 0.75  # Коэффициент преобразовани
 DEFAULT_EXCEL_COLUMN_WIDTH = 40  # Ширина колонки в единицах Excel (примерно 300px)
 MIN_COLUMN_WIDTH_PX = 100  # Минимальная допустимая ширина колонки в пикселях
 
+# <<< Constants for PDF layout optimization >>>
+PDF_MARGIN_LEFT = 3  # Левое поле в мм (уменьшено для оптимизации)
+PDF_MARGIN_RIGHT = 3  # Правое поле в мм (уменьшено для оптимизации)
+PDF_MARGIN_TOP = 3  # Верхнее поле в мм (уменьшено для оптимизации)
+PDF_MARGIN_BOTTOM = 3  # Нижнее поле в мм (уменьшено для оптимизации)
+PDF_SAFETY_MARGIN = 10  # Отступ безопасности в мм (уменьшен с 56 = 4 * 14)
+
 # <<< Constants for progress formatting >>>
 POWERSHELL_GREEN = '\033[92m'
 POWERSHELL_YELLOW = '\033[93m'
@@ -859,6 +866,10 @@ def create_pdf_cards(
     image_utils.cached_quality = None # Reset cached quality for each new processing session
 
     pdf = FPDF(orientation='P', unit='mm', format=(90, 160))
+    # Устанавливаем минимальные поля для максимального использования пространства
+    pdf.set_margins(PDF_MARGIN_LEFT, PDF_MARGIN_TOP, PDF_MARGIN_RIGHT)
+    # Устанавливаем автоматический разрыв страницы с минимальным нижним полем
+    pdf.set_auto_page_break(True, PDF_MARGIN_BOTTOM)
     
     # Проверяем, есть ли данные для обработки
     
@@ -883,7 +894,7 @@ def create_pdf_cards(
         
     # Определяем запас по высоте для предотвращения выхода текста за границы страницы
     # Оставляем запас в 4 строки текста при стандартном размере шрифта
-    safety_margin = 4 * 14  # 4 строки по 14 пунктов (максимальный размер шрифта)
+    safety_margin = PDF_SAFETY_MARGIN  # Используем константу вместо жесткого значения
 
     inserted_cards = 0
     not_found_articles = []
@@ -953,7 +964,9 @@ def create_pdf_cards(
                 temp_img_path = os.path.join(tempfile.gettempdir(), f"temp_product_{article}.jpg")
                 with open(temp_img_path, "wb") as f:
                     f.write(optimized_buffer.getvalue())
-                pdf.image(temp_img_path, x=5, y=5, w=40)
+                # Рассчитываем оптимальную ширину изображения товара
+                img_width = (pdf.w - PDF_MARGIN_LEFT - PDF_MARGIN_RIGHT) / 2 - 2
+                pdf.image(temp_img_path, x=PDF_MARGIN_LEFT, y=PDF_MARGIN_TOP, w=img_width)
                 os.remove(temp_img_path)
             except Exception as e:
                 logger.error(f"Ошибка при вставке изображения товара '{product_img_path}' для артикула '{article}': {e}")
@@ -969,14 +982,19 @@ def create_pdf_cards(
                 temp_img_path = os.path.join(tempfile.gettempdir(), f"temp_package_{article}.jpg")
                 with open(temp_img_path, "wb") as f:
                     f.write(optimized_buffer.getvalue())
-                pdf.image(temp_img_path, x=45, y=5, w=40)
+                # Рассчитываем оптимальную ширину и позицию изображения упаковки
+                img_width = (pdf.w - PDF_MARGIN_LEFT - PDF_MARGIN_RIGHT) / 2 - 2
+                img_x = PDF_MARGIN_LEFT + img_width + 2
+                pdf.image(temp_img_path, x=img_x, y=PDF_MARGIN_TOP, w=img_width)
                 os.remove(temp_img_path)
             except Exception as e:
                 logger.error(f"Ошибка при вставке изображения упаковки '{package_img_path}' для артикула '{article}': {e}")
 
 
         # Add text
-        pdf.set_y(45)  # Уменьшен отступ для оптимизации пространства
+        # Устанавливаем позицию Y после изображений с минимальным отступом
+        img_height = 40  # Примерная высота изображений
+        pdf.set_y(PDF_MARGIN_TOP + img_height + 2)  # Минимальный отступ после изображений
         
         # Собираем текст из всех ячеек строки, включая артикул в его исходном порядке
         text_lines = []
@@ -996,7 +1014,8 @@ def create_pdf_cards(
         
         # Уменьшаем доступную высоту, чтобы учесть возможное уменьшение пространства внизу страницы
         # Используем safety_margin, определенный в начале функции
-        available_height = 160 - pdf.y - safety_margin  # Максимальное значение высоты страницы
+        # Рассчитываем доступную высоту с учетом нижнего поля и отступа безопасности
+        available_height = pdf.h - pdf.y - PDF_MARGIN_BOTTOM - safety_margin
 
         best_font_size = 0
         final_lines_to_render = []
@@ -1015,7 +1034,8 @@ def create_pdf_cards(
 
         # Оптимизируем ширину колонки заголовка, чтобы она не была избыточно большой при коротких заголовках
         # Добавляем минимальный отступ и ограничиваем максимальную ширину заголовка до 30% от доступной ширины
-        max_header_width = min(max_header_width + 2, available_width * 0.3)  # +2 для минимального отступа
+        # Оптимизируем ширину заголовка для лучшего использования пространства
+        max_header_width = min(max_header_width + 2, available_width * 0.4)  # Увеличиваем до 40% от доступной ширины
         # Устанавливаем отступ между колонками
         column_spacing = pdf.get_string_width("W")  # Используем ширину широкого символа 'W' как отступ
         value_width = available_width - max_header_width - column_spacing  # Отступ между колонками
@@ -1128,7 +1148,7 @@ def create_pdf_cards(
         for item in final_lines_to_render:
             # Проверяем, не достигли ли мы нижней границы страницы
             # Используем то же ограничение, что и при расчете available_height
-            if pdf.get_y() > (160 - safety_margin):  # Оставляем отступ от нижнего края с учетом safety_margin
+            if pdf.get_y() > (pdf.h - PDF_MARGIN_BOTTOM - safety_margin):  # Оставляем отступ от нижнего края с учетом safety_margin
                 # Добавляем красные стрелки, указывающие на продолжение на следующей странице
                 current_y = pdf.get_y()
                 # Сохраняем текущие настройки шрифта
