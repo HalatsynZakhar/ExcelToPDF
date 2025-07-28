@@ -861,6 +861,8 @@ def create_pdf_cards(
     max_total_file_size_mb: int = 100,
     original_file_name: str = None,
     sheet_name: str = None,
+    workbook: openpyxl.Workbook = None,
+    worksheet: openpyxl.worksheet.worksheet.Worksheet = None,
 ) -> Tuple[str, int, List[str]]:
     """
     Создает PDF-файл с карточками товаров.
@@ -1003,18 +1005,38 @@ def create_pdf_cards(
         text_lines = []
         # Используем заголовки из первой строки и значения из текущей строки
         for i in range(len(row)):
-            # Получаем значение ячейки
-            raw_value = row.iloc[i]
-            # Проверяем на NaN
-            if isinstance(raw_value, (int, float)) and not math.isnan(raw_value):
-                # Если число целое, отображаем без десятичной части
-                if raw_value == int(raw_value):
-                    cell_value = str(int(raw_value)).strip()
+            # Получаем значение ячейки с форматированием, если доступны workbook и worksheet
+            if workbook and worksheet:
+                try:
+                    # Получаем номер строки в Excel (учитываем, что индекс в pandas начинается с 0, а в Excel с 1)
+                    # Также учитываем, что мы пропустили строку заголовков
+                    excel_row = index + 1  # index уже скорректирован для пропуска заголовков
+                    excel_col = i + 1  # Колонки в Excel начинаются с 1
+                    
+                    # Используем функцию форматирования из excel_utils
+                    cell_value = excel_utils.get_formatted_cell_value(worksheet, excel_row, excel_col)
+                except Exception as e:
+                    logger.warning(f"Ошибка при получении отформатированного значения ячейки [{excel_row}, {excel_col}]: {e}")
+                    # Fallback к стандартной обработке
+                    raw_value = row.iloc[i]
+                    if isinstance(raw_value, (int, float)) and not math.isnan(raw_value):
+                        if raw_value == int(raw_value):
+                            cell_value = str(int(raw_value)).strip()
+                        else:
+                            cell_value = str(raw_value).strip()
+                    else:
+                        cell_value = str(raw_value).strip()
+            else:
+                # Стандартная обработка без форматирования
+                raw_value = row.iloc[i]
+                if isinstance(raw_value, (int, float)) and not math.isnan(raw_value):
+                    if raw_value == int(raw_value):
+                        cell_value = str(int(raw_value)).strip()
+                    else:
+                        cell_value = str(raw_value).strip()
                 else:
                     cell_value = str(raw_value).strip()
-            else:
-                # Если значение NaN или не число, преобразуем в строку
-                cell_value = str(raw_value).strip()
+            
             # Получаем заголовок для текущей колонки
             header = headers[i] if i < len(headers) else f"Столбец {i+1}"
             header = str(header).strip()

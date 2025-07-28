@@ -18,6 +18,8 @@ from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.worksheet.dimensions import ColumnDimension, RowDimension
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from datetime import datetime
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,144 @@ def set_cell_value(worksheet: Worksheet, row: int, column: Union[int, str], valu
     except Exception as e:
         logger.error(f"Ошибка при установке значения ячейки [{row}, {column}]: {e}")
         return False
+
+def get_formatted_cell_value(worksheet: Worksheet, row: int, column: Union[int, str]) -> str:
+    """
+    Получает отформатированное значение ячейки с учетом форматирования Excel.
+    
+    Args:
+        worksheet (Worksheet): Рабочий лист
+        row (int): Номер строки (от 1)
+        column (Union[int, str]): Номер столбца (от 1) или буквенное обозначение
+    
+    Returns:
+        str: Отформатированное значение ячейки
+    """
+    try:
+        if isinstance(column, str):
+            cell = worksheet.cell(row=row, column=column_index_from_string(column))
+        else:
+            cell = worksheet.cell(row=row, column=column)
+        
+        # Если ячейка пустая
+        if cell.value is None:
+            return ""
+        
+        # Получаем формат числа
+        number_format = cell.number_format
+        value = cell.value
+        
+        # Обработка различных типов форматирования
+        if isinstance(value, datetime):
+            # Обработка дат
+            if 'yyyy' in number_format.lower() or 'dd' in number_format.lower():
+                if 'hh' in number_format.lower() or 'mm' in number_format.lower():
+                    # Дата и время
+                    return value.strftime('%d.%m.%Y %H:%M')
+                else:
+                    # Только дата
+                    return value.strftime('%d.%m.%Y')
+            else:
+                return str(value)
+        
+        elif isinstance(value, (int, float)):
+            # Обработка чисел
+            # Проверяем, является ли формат общим (General)
+            if number_format == 'General' or number_format == '@':
+                # Общий формат - отображаем как в Excel без дополнительного форматирования
+                if isinstance(value, float):
+                    if value.is_integer():
+                        return str(int(value))
+                    else:
+                        # Для дробных чисел используем стандартное представление Python
+                        return str(value)
+                else:
+                    return str(value)
+            
+            elif '%' in number_format:
+                # Процентный формат - определяем количество знаков после запятой
+                if '.' in number_format:
+                    # Находим часть после точки до символа %
+                    parts = number_format.split('.')
+                    if len(parts) > 1:
+                        after_dot = parts[1].split('%')[0]
+                        decimal_places = len([c for c in after_dot if c in '0#'])
+                        return f"{value * 100:.{decimal_places}f}%"
+                return f"{value * 100:.0f}%"
+            
+            elif any(symbol in number_format for symbol in ['₽', '$', '€', '£']):
+                # Денежный формат
+                if '₽' in number_format:
+                    return f"{value:,.2f} ₽"
+                elif '$' in number_format:
+                    return f"${value:,.2f}"
+                elif '€' in number_format:
+                    return f"{value:,.2f} €"
+                elif '£' in number_format:
+                    return f"£{value:,.2f}"
+            
+            elif '0.00' in number_format or '#.##' in number_format or '.' in number_format:
+                # Числовой формат с десятичными знаками
+                # Ищем количество знаков после точки в формате
+                if '.' in number_format:
+                    # Находим часть после точки
+                    after_dot = number_format.split('.')[1]
+                    # Считаем количество символов '0' и '#' после точки
+                    decimal_places = 0
+                    for char in after_dot:
+                        if char in '0#':
+                            decimal_places += 1
+                        elif char.isalpha() or char in ' %$€£₽':
+                            break
+                    
+                    if decimal_places > 0:
+                        return f"{value:.{decimal_places}f}"
+                    else:
+                        return f"{value:,.0f}"
+                else:
+                    return f"{value:,.0f}"
+            
+            elif '#,##0' in number_format and '.' not in number_format:
+                # Числовой формат с разделителями тысяч БЕЗ десятичных знаков
+                if isinstance(value, float) and value.is_integer():
+                    return f"{int(value):,}"
+                else:
+                    return f"{value:,.0f}"
+            
+            elif '#,##0.' in number_format or '0,0.' in number_format:
+                # Числовой формат с разделителями тысяч И десятичными знаками
+                if '.' in number_format:
+                    after_dot = number_format.split('.')[1]
+                    decimal_places = len([c for c in after_dot if c in '0#'])
+                    return f"{value:,.{decimal_places}f}"
+                else:
+                    return f"{value:,.2f}"
+            
+            else:
+                # Обычное число
+                if isinstance(value, float):
+                    if value.is_integer():
+                        return str(int(value))
+                    else:
+                        return f"{value:.2f}"
+                else:
+                    return str(value)
+        
+        else:
+            # Текстовые значения и прочие
+            return str(value)
+    
+    except Exception as e:
+        logger.error(f"Ошибка при получении отформатированного значения ячейки [{row}, {column}]: {e}")
+        # Возвращаем обычное значение в случае ошибки
+        try:
+            if isinstance(column, str):
+                cell = worksheet.cell(row=row, column=column_index_from_string(column))
+            else:
+                cell = worksheet.cell(row=row, column=column)
+            return str(cell.value) if cell.value is not None else ""
+        except:
+            return ""
 
 def find_column_by_header(worksheet: Worksheet, header_text: str, header_row: int = 1) -> Optional[int]:
     """

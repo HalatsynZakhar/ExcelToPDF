@@ -1098,6 +1098,21 @@ def process_files():
                 log.error(error_msg)
                 return False
 
+            # Загружаем workbook для получения форматирования ячеек
+            workbook = None
+            worksheet = None
+            try:
+                if st.session_state.temp_file_path and os.path.exists(st.session_state.temp_file_path):
+                    workbook = load_workbook(st.session_state.temp_file_path, read_only=True)
+                    sheet_name = st.session_state.selected_sheet
+                    if sheet_name and sheet_name in workbook.sheetnames:
+                        worksheet = workbook[sheet_name]
+                    else:
+                        worksheet = workbook.active
+            except Exception as e:
+                log.warning(f"Не удалось загрузить workbook для форматирования: {e}")
+                add_log_message(f"Предупреждение: форматирование ячеек может быть неточным", "WARNING")
+
             output_path, inserted_cards, not_found_articles = create_pdf_cards(
                 df=df,
                 article_col_name=article_col,
@@ -1107,7 +1122,9 @@ def process_files():
                 progress_callback=lambda current, total: add_log_message(f"Обработано {current} из {total} строк", "INFO"),
                 max_total_file_size_mb=st.session_state.get('max_file_size_mb', 100),
                 original_file_name=st.session_state.temp_file_path,
-                sheet_name=st.session_state.selected_sheet
+                sheet_name=st.session_state.selected_sheet,
+                workbook=workbook,
+                worksheet=worksheet
             )
 
             # Сохраняем настройки после успешной обработки
