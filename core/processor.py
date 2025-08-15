@@ -24,9 +24,7 @@ if parent_dir not in sys.path:
 
 # Import utils modules directly
 from utils import config_manager
-from utils import excel_utils
-from utils import image_utils
-import utils.image_utils as image_utils
+from utils import image_utils # Импортируем весь модуль
 
 # Import get_downloads_folder from config_manager
 from utils.config_manager import get_downloads_folder
@@ -119,6 +117,60 @@ def ensure_temp_dir(prefix: str = "") -> str:
     temp_dir = os.path.join(tempfile.gettempdir(), f"{prefix}excelwithimages")
     os.makedirs(temp_dir, exist_ok=True)
     return temp_dir
+
+def find_images_in_multiple_folders(
+    article: str,
+    primary_folder: str,
+    secondary_folder: Optional[str],
+    tertiary_folder: Optional[str],
+    supported_extensions: Tuple[str, ...],
+    search_recursively: bool = True
+) -> Dict[str, Any]:
+    """
+    Ищет изображения по артикулу в нескольких папках с разным приоритетом.
+    Использует image_utils.normalize_article для сравнения.
+    """
+    # Нормализуем артикул из Excel один раз перед поиском
+    normalized_article_from_excel = image_utils.normalize_article(article, for_excel=True)
+    logger.debug(f"Поиск для артикула '{article}' (нормализован: '{normalized_article_from_excel}')")
+    
+    if not normalized_article_from_excel:
+        return {"found": False, "images": [], "source_folder": None}
+
+    search_order = [
+        ("primary", primary_folder),
+        ("secondary", secondary_folder),
+        ("tertiary", tertiary_folder),
+    ]
+
+    for source, folder_path in search_order:
+        if not folder_path or not os.path.exists(folder_path):
+            continue
+
+        found_images = []
+        
+        walk_generator = os.walk(folder_path) if search_recursively else [(os.path.dirname(folder_path) or folder_path, [], os.listdir(folder_path))]
+
+        for root, _, files in walk_generator:
+            for file in files:
+                if file.lower().endswith(supported_extensions):
+                    file_name_without_ext = os.path.splitext(file)[0]
+                    # Нормализуем имя файла для сравнения
+                    normalized_file_name = image_utils.normalize_article(file_name_without_ext, for_excel=False)
+                    
+                    if normalized_file_name == normalized_article_from_excel:
+                        found_images.append(os.path.join(root, file))
+        
+        if found_images:
+            logger.info(f"Найдено {len(found_images)} изображений для '{article}' в папке '{source}'")
+            return {
+                "found": True,
+                "images": sorted(found_images), # Сортируем для предсказуемости
+                "source_folder": source
+            }
+
+    return {"found": False, "images": [], "source_folder": None}
+
 
 def process_excel_file(
     file_path: str,
@@ -368,7 +420,6 @@ def process_excel_file(
     print("[PROCESSOR] --- Начало итерации по строкам DataFrame ---", file=sys.stderr)
     
     # Сбрасываем кеш качества перед обработкой нового файла
-    from utils.image_utils import cached_quality
     image_utils.cached_quality = None
     print("[PROCESSOR] Кеш качества изображений сброшен", file=sys.stderr)
     
@@ -410,7 +461,8 @@ def process_excel_file(
         print(f"[PROCESSOR DEBUG]   Вторичная: {secondary_folder_path}", file=sys.stderr)
         print(f"[PROCESSOR DEBUG]   Третичная: {tertiary_folder_path}", file=sys.stderr)
         
-        search_result = image_utils.find_images_in_multiple_folders(
+        # Используем новую функцию, которая сама выполняет нормализацию
+        search_result = find_images_in_multiple_folders(
             article_str, 
             image_folder,
             secondary_folder_path,
@@ -471,29 +523,10 @@ def process_excel_file(
             print(f"[PROCESSOR]   Вызов optimize_image_for_excel для {image_path} с лимитом {target_kb_per_image:.1f} КБ", file=sys.stderr)
             
             try:
-                # Если уровень качества еще не определен, определяем его на первом изображении,
-                # которое требует оптимизации
-                if not quality_determined:
-                    # Ищем оптимальное качество для сжатия
-                    print(f"[PROCESSOR]   ОПРЕДЕЛЕНИЕ ОПТИМАЛЬНОГО КАЧЕСТВА: поиск качества от {DEFAULT_IMG_QUALITY}% до {MIN_IMG_QUALITY}%", file=sys.stderr)
-                    optimized_buffer = image_utils.optimize_image_for_excel(
-                        image_path, 
-                        target_size_kb=target_kb_per_image,
-                        quality=DEFAULT_IMG_QUALITY,
-                        min_quality=MIN_IMG_QUALITY    
-                    )
-                    
-                    # Помечаем что определили качество
-                    quality_determined = True
-                else:
-                    # Для всех последующих изображений используем кешированное качество
-                    print(f"[PROCESSOR]   Используем кешированное качество для изображения {image_path}", file=sys.stderr)
-                    optimized_buffer = image_utils.optimize_image_for_excel(
-                        image_path, 
-                        target_size_kb=target_kb_per_image,
-                        quality=DEFAULT_IMG_QUALITY,
-                        min_quality=MIN_IMG_QUALITY    
-                    )
+                optimized_buffer = image_utils.optimize_image_for_excel(
+                    image_path, 
+                    target_size_kb=target_kb_per_image
+                )
             except Exception as e:
                 print(f"[PROCESSOR ERROR]   Ошибка при оптимизации изображения: {e}", file=sys.stderr)
                 # Если не удалось оптимизировать, попробуем загрузить оригинальное изображение
@@ -763,10 +796,17 @@ def _get_col_index(col_identifier: str, df_columns: pd.Index) -> int:
 def find_image_path(article: str, folders: List[str]) -> Optional[str]:
     """
     Ищет изображение по артикулу в списке папок, включая подпапки (рекурсивно).
-    Логика поиска соответствует оригинальной программе.
+    Использует централизованную логику нормализации из image_utils.
     """
     logger.debug(f"Поиск для артикула '{article}' в папках: {folders}")
     supported_extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
+
+    # Нормализуем артикул из Excel перед поиском
+    normalized_article_from_excel = image_utils.normalize_article(article, for_excel=True)
+
+    if not normalized_article_from_excel:
+        logger.warning(f"Артикул '{article}' после нормализации стал пустым, поиск невозможен.")
+        return None
 
     for folder in folders:
         if not folder or not os.path.exists(folder):
@@ -778,10 +818,12 @@ def find_image_path(article: str, folders: List[str]) -> Optional[str]:
             for file in files:
                 file_name_without_ext, extension = os.path.splitext(file)
                 if extension.lower() in supported_extensions:
-                    if file_name_without_ext == article:
+                    # Нормализуем имя файла для сравнения
+                    normalized_file_name = image_utils.normalize_article(file_name_without_ext, for_excel=False)
+                    if normalized_file_name == normalized_article_from_excel:
                         img_path = os.path.join(root, file)
                         logger.info(f"Найдено изображение для артикула '{article}': {img_path}")
-                        return img_path
+                        return img_path  # Возвращаем первый найденный путь
 
     logger.warning(f"Изображение для артикула '{article}' не найдено ни в одной из папок.")
     return None

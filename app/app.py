@@ -22,7 +22,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Используем относительные импорты вместо абсолютных
 from utils import config_manager
-from utils import excel_utils
 from utils import image_utils
 from utils.config_manager import get_downloads_folder, ConfigManager
 # <<< ДОБАВЛЯЕМ ГЛОБАЛЬНЫЙ ИМПОРТ >>>
